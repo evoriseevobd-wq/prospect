@@ -256,7 +256,7 @@ function PipelineRow({ prospect, onStatusChange, onRemove }) {
 function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [tab, setTab] = useState("config");
-  const [anthropicKey, setAnthropicKey] = useState("");
+  const [geminiKey, setGeminiKey] = useState("");
   const [googleKey, setGoogleKey] = useState("");
   const [city, setCity] = useState("Botucatu");
   const [category, setCategory] = useState("");
@@ -271,10 +271,10 @@ function App() {
   useEffect(() => {
     try { const p = storage.get("pipeline_v1"); if (p) setPipeline(JSON.parse(p.value)); } catch {}
     try {
-      const k = storage.get("api_keys_v1");
+      const k = storage.get("api_keys_v2");
       if (k) {
         const keys = JSON.parse(k.value);
-        setAnthropicKey(keys.anthropic || "");
+        setGeminiKey(keys.gemini || "");
         setGoogleKey(keys.google || "");
         if (keys.google) setTab("search");
       }
@@ -284,7 +284,7 @@ function App() {
   if (!unlocked) return <PasswordScreen onUnlock={() => setUnlocked(true)} />;
 
   function saveKeys() {
-    storage.set("api_keys_v1", JSON.stringify({ anthropic: anthropicKey, google: googleKey }));
+    storage.set("api_keys_v2", JSON.stringify({ gemini: geminiKey, google: googleKey }));
     setKeySaved(true);
     setTimeout(() => { setKeySaved(false); setTab("search"); }, 900);
   }
@@ -334,9 +334,10 @@ function App() {
   }
 
   async function scorePlace(place, index) {
-    if (!anthropicKey) { setError("Configure a chave Anthropic na aba Config!"); return; }
+    if (!geminiKey) { setError("Configure a chave Gemini na aba Config!"); return; }
     setScoringId(place.id);
     setError("");
+
     const prompt = `Você é um consultor de prospecção B2B especialista em marketing digital para PMEs.
 
 Avalie o potencial de conversão deste prospect:
@@ -348,31 +349,34 @@ Avalie o potencial de conversão deste prospect:
 - Telefone disponível: ${place.phone !== "N/D" ? "Sim" : "Não"}
 
 Responda SOMENTE com JSON puro, sem markdown, sem texto extra:
-{"score":85,"grade":"A","explanation":"2 frases sobre pontos fortes e oportunidade.","pitch":"2 frases de pitch personalizado para abordagem inicial."}`;
+{"score":85,"grade":"A","explanation":"2 frases sobre pontos fortes e oportunidade.","pitch":"2 frases de pitch personalizado para abordagem inicial."}
+
+Critérios de grade: A=80-100, B=60-79, C=40-59, D=0-39`;
+
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": anthropicKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true"
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5",
-          max_tokens: 500,
-          messages: [{ role: "user", content: prompt }]
-        })
-      });
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.4, maxOutputTokens: 500 }
+          })
+        }
+      );
       if (!res.ok) {
         const errData = await res.json();
         throw new Error(errData.error?.message || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      const raw = data.content?.[0]?.text || "{}";
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
       const clean = raw.replace(/```json|```/g, "").trim();
       const parsed = JSON.parse(clean);
-      setResults(prev => prev.map((p, i) => i === index ? { ...p, score: parsed.score, grade: parsed.grade, scoreExplanation: parsed.explanation, pitch: parsed.pitch } : p));
+      setResults(prev => prev.map((p, i) => i === index
+        ? { ...p, score: parsed.score, grade: parsed.grade, scoreExplanation: parsed.explanation, pitch: parsed.pitch }
+        : p
+      ));
     } catch (e) { setError("Erro no scoring: " + e.message); }
     setScoringId(null);
   }
@@ -450,8 +454,8 @@ Responda SOMENTE com JSON puro, sem markdown, sem texto extra:
             <div style={{ fontFamily:"'Space Mono',monospace", fontSize:11, color:"#64748b", letterSpacing:2, textTransform:"uppercase" }}>Configuração de chaves de API</div>
             <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:20, display:"flex", flexDirection:"column", gap:14 }}>
               {[
-                { label:"Chave Google (Places API New)", hint:"AIza...", val:googleKey, set:setGoogleKey, note:'Ative "Places API (New)" no Google Cloud' },
-                { label:"Chave Anthropic API (Score IA)", hint:"sk-ant-...", val:anthropicKey, set:setAnthropicKey, note:"Opcional — para score e pitch gerados por IA" },
+                { label:"Chave Google (Places API New)", hint:"AIza...", val:googleKey, set:setGoogleKey, note:'Ative "Places API (New)" no Google Cloud Console' },
+                { label:"Chave Gemini API (Score IA — Grátis)", hint:"AIza...", val:geminiKey, set:setGeminiKey, note:"Grátis em aistudio.google.com/apikey" },
               ].map(f => (
                 <div key={f.label}>
                   <label style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b", display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:1 }}>{f.label}</label>
@@ -468,11 +472,11 @@ Responda SOMENTE com JSON puro, sem markdown, sem texto extra:
                 fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:12, cursor:"pointer", letterSpacing:1
               }}>{keySaved ? "✓ SALVO!" : "SALVAR E CONTINUAR →"}</button>
             </div>
-            <div style={{ background:"rgba(245,158,11,0.05)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:8, padding:14 }}>
-              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#f59e0b", marginBottom:6 }}>⚠ IMPORTANTE — APIs necessárias no Google Cloud</div>
-              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.8 }}>
-                1. <strong style={{color:"#e2e8f0"}}>Places API (New)</strong> — para retornar dados dos estabelecimentos<br/>
-                Ative em: APIs e Serviços → Biblioteca
+            <div style={{ background:"rgba(74,222,128,0.05)", border:"1px solid rgba(74,222,128,0.2)", borderRadius:8, padding:14 }}>
+              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#4ade80", marginBottom:8 }}>✦ COMO OBTER AS CHAVES</div>
+              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:2 }}>
+                <strong style={{color:"#e2e8f0"}}>1. Google Places</strong> → console.cloud.google.com → APIs → Places API (New)<br/>
+                <strong style={{color:"#e2e8f0"}}>2. Gemini (grátis)</strong> → aistudio.google.com/apikey → Create API Key
               </div>
             </div>
           </div>
