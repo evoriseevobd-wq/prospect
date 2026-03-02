@@ -1,25 +1,18 @@
-import { useState, useEffect } from "react";
-
-const loadXLSX = () => new Promise((resolve) => {
-  if (window.XLSX) return resolve(window.XLSX);
-  const s = document.createElement("script");
-  s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
-  s.onload = () => resolve(window.XLSX);
-  document.head.appendChild(s);
-});
-
-const CORRECT_PASSWORD = "1235";
-const STATUSES = [
-  { id: "none",    label: "Não contatado",   color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
-  { id: "called",  label: "Ligação feita",   color: "#f59e0b", bg: "rgba(245,158,11,0.12)"  },
-  { id: "meeting", label: "Reunião marcada", color: "#38bdf8", bg: "rgba(56,189,248,0.12)"  },
-  { id: "closed",  label: "Fechado/Cliente", color: "#4ade80", bg: "rgba(74,222,128,0.12)"  },
-];
-const GRADE_COLORS = { A: "#4ade80", B: "#a3e635", C: "#f59e0b", D: "#f87171" };
-
-const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ProspectIQ</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body, #root { height: 100%; }
   body { background: #0c0f14; }
   ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: #0c0f14; }
@@ -32,12 +25,39 @@ const css = `
   }
   @keyframes scanline { 0%{top:-10%} 100%{top:110%} }
   .card-enter { animation: fadeUp 0.35s ease forwards; }
+  .scanning { position: relative; overflow: hidden; }
   .scanning::after {
     content:''; position:absolute; left:0; right:0; height:1px;
     background: linear-gradient(90deg,transparent,rgba(56,189,248,0.6),transparent);
     animation: scanline 1.8s linear infinite;
+    top: 0;
   }
-`;
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+const CORRECT_PASSWORD = "1235";
+const STATUSES = [
+  { id: "none",    label: "Não contatado",   color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
+  { id: "called",  label: "Ligação feita",   color: "#f59e0b", bg: "rgba(245,158,11,0.12)"  },
+  { id: "meeting", label: "Reunião marcada", color: "#38bdf8", bg: "rgba(56,189,248,0.12)"  },
+  { id: "closed",  label: "Fechado/Cliente", color: "#4ade80", bg: "rgba(74,222,128,0.12)"  },
+];
+const GRADE_COLORS = { A: "#4ade80", B: "#a3e635", C: "#f59e0b", D: "#f87171" };
+
+// Simple localStorage-based storage to replace window.storage
+const storage = {
+  get: (key) => {
+    try { const v = localStorage.getItem(key); return v ? { value: v } : null; } catch { return null; }
+  },
+  set: (key, value) => {
+    try { localStorage.setItem(key, value); return true; } catch { return null; }
+  }
+};
 
 function PasswordScreen({ onUnlock }) {
   const [dots, setDots] = useState([]);
@@ -58,7 +78,6 @@ function PasswordScreen({ onUnlock }) {
 
   return (
     <div style={{ minHeight:"100vh", background:"#0c0f14", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:32 }}>
-      <style>{css}</style>
       <div style={{ textAlign:"center" }}>
         <div style={{ fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:22, color:"#38bdf8", letterSpacing:3 }}>
           PROSPECT<span style={{ color:"#4ade80" }}>IQ</span>
@@ -235,7 +254,7 @@ function PipelineRow({ prospect, onStatusChange, onRemove }) {
   );
 }
 
-export default function App() {
+function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [tab, setTab] = useState("config");
   const [anthropicKey, setAnthropicKey] = useState("");
@@ -251,31 +270,28 @@ export default function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    (async () => {
-      try { const p = await window.storage.get("pipeline_v1"); if (p) setPipeline(JSON.parse(p.value)); } catch {}
-      try {
-        const k = await window.storage.get("api_keys_v1");
-        if (k) {
-          const keys = JSON.parse(k.value);
-          setAnthropicKey(keys.anthropic || "");
-          setGoogleKey(keys.google || "");
-          if (keys.google) setTab("search");
-        }
-      } catch {}
-      loadXLSX();
-    })();
+    try { const p = storage.get("pipeline_v1"); if (p) setPipeline(JSON.parse(p.value)); } catch {}
+    try {
+      const k = storage.get("api_keys_v1");
+      if (k) {
+        const keys = JSON.parse(k.value);
+        setAnthropicKey(keys.anthropic || "");
+        setGoogleKey(keys.google || "");
+        if (keys.google) setTab("search");
+      }
+    } catch {}
   }, []);
 
   if (!unlocked) return <PasswordScreen onUnlock={() => setUnlocked(true)} />;
 
-  async function saveKeys() {
-    await window.storage.set("api_keys_v1", JSON.stringify({ anthropic: anthropicKey, google: googleKey }));
+  function saveKeys() {
+    storage.set("api_keys_v1", JSON.stringify({ anthropic: anthropicKey, google: googleKey }));
     setKeySaved(true);
     setTimeout(() => { setKeySaved(false); setTab("search"); }, 900);
   }
 
-  async function savePipeline(data) {
-    try { await window.storage.set("pipeline_v1", JSON.stringify(data)); } catch {}
+  function savePipeline(data) {
+    try { storage.set("pipeline_v1", JSON.stringify(data)); } catch {}
   }
 
   async function doSearch() {
@@ -336,7 +352,12 @@ Responda SOMENTE com JSON puro, sem markdown, sem texto extra:
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": anthropicKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
         body: JSON.stringify({
           model: "claude-sonnet-4-20250514", max_tokens: 500,
           messages: [{ role: "user", content: prompt }]
@@ -372,8 +393,8 @@ Responda SOMENTE com JSON puro, sem markdown, sem texto extra:
     setPipeline(updated); savePipeline(updated);
   }
 
-  async function exportExcel() {
-    const XLSX = await loadXLSX();
+  function exportExcel() {
+    const XLSX = window.XLSX;
     const rows = pipeline.map(p => ({
       Nome: p.name, Categoria: p.category, Cidade: p.city,
       Telefone: p.phone, "Endereço": p.address,
@@ -394,144 +415,145 @@ Responda SOMENTE com JSON puro, sem markdown, sem texto extra:
   const pipelineByStatus = STATUSES.reduce((acc, s) => { acc[s.id] = pipeline.filter(p => p.status === s.id).length; return acc; }, {});
 
   return (
-    <>
-      <style>{css}</style>
-      <div style={{ minHeight:"100vh", background:"#0c0f14", fontFamily:"'DM Sans',sans-serif", color:"#e2e8f0", paddingBottom:60 }}>
-        <div style={{ background:"linear-gradient(180deg,#0f131a,#0c0f14)", borderBottom:"1px solid #1e2535", padding:"16px 24px", display:"flex", alignItems:"center", gap:16 }}>
-          <div>
-            <div style={{ fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:15, color:"#38bdf8", letterSpacing:2 }}>
-              PROSPECT<span style={{ color:"#4ade80" }}>IQ</span>
-            </div>
-            <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#3d4559", letterSpacing:3, textTransform:"uppercase" }}>sistema de prospecção b2b</div>
+    <div style={{ minHeight:"100vh", background:"#0c0f14", fontFamily:"'DM Sans',sans-serif", color:"#e2e8f0", paddingBottom:60 }}>
+      <div style={{ background:"linear-gradient(180deg,#0f131a,#0c0f14)", borderBottom:"1px solid #1e2535", padding:"16px 24px", display:"flex", alignItems:"center", gap:16 }}>
+        <div>
+          <div style={{ fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:15, color:"#38bdf8", letterSpacing:2 }}>
+            PROSPECT<span style={{ color:"#4ade80" }}>IQ</span>
           </div>
-          <div style={{ flex:1 }} />
-          {["config","search","pipeline"].map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              background: tab===t ? "rgba(56,189,248,0.1)" : "transparent",
-              border: tab===t ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
-              color: tab===t ? "#38bdf8" : "#64748b",
-              padding:"6px 14px", borderRadius:6, cursor:"pointer",
-              fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase"
-            }}>
-              {t==="config" ? "⚙ Config" : t==="search" ? "🔍 Busca" : `📋 Pipeline${pipeline.length>0?` (${pipeline.length})`:""}`}
-            </button>
-          ))}
+          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#3d4559", letterSpacing:3, textTransform:"uppercase" }}>sistema de prospecção b2b</div>
         </div>
-
-        <div style={{ maxWidth:900, margin:"0 auto", padding:"24px 16px" }}>
-
-          {tab === "config" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:16, maxWidth:520, margin:"0 auto" }}>
-              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:11, color:"#64748b", letterSpacing:2, textTransform:"uppercase" }}>Configuração de chaves de API</div>
-              <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:20, display:"flex", flexDirection:"column", gap:14 }}>
-                {[
-                  { label:"Chave Google (Maps JavaScript API)", hint:"AIza...", val:googleKey, set:setGoogleKey, note:'Ative "Maps JavaScript API" + "Places API (New)" no Google Cloud' },
-                  { label:"Chave Anthropic API (Score IA)", hint:"sk-ant-...", val:anthropicKey, set:setAnthropicKey, note:"Opcional — para score e pitch gerados por IA" },
-                ].map(f => (
-                  <div key={f.label}>
-                    <label style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b", display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:1 }}>{f.label}</label>
-                    <input type="password" value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.hint} style={{
-                      width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6,
-                      padding:"9px 12px", color:"#e2e8f0", fontFamily:"'Space Mono',monospace", fontSize:12
-                    }} />
-                    <div style={{ fontSize:11, color:"#3d4559", marginTop:4 }}>{f.note}</div>
-                  </div>
-                ))}
-                <button onClick={saveKeys} style={{
-                  background: keySaved ? "linear-gradient(135deg,#4ade80,#22c55e)" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-                  color:"#0c0f14", border:"none", borderRadius:7, padding:"10px 20px",
-                  fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:12, cursor:"pointer", letterSpacing:1
-                }}>{keySaved ? "✓ SALVO!" : "SALVAR E CONTINUAR →"}</button>
-              </div>
-              <div style={{ background:"rgba(245,158,11,0.05)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:8, padding:14 }}>
-                <div style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#f59e0b", marginBottom:6 }}>⚠ IMPORTANTE — APIs necessárias no Google Cloud</div>
-                <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.8 }}>
-                  1. <strong style={{color:"#e2e8f0"}}>Maps JavaScript API</strong> — obrigatória para a busca funcionar no navegador<br/>
-                  2. <strong style={{color:"#e2e8f0"}}>Places API (New)</strong> — para retornar dados dos estabelecimentos<br/>
-                  Ative as duas em: APIs e Serviços → Biblioteca
-                </div>
-              </div>
-            </div>
-          )}
-
-          {tab === "search" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-              <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:16 }}>
-                <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end" }}>
-                  <div style={{ flex:"1 1 130px" }}>
-                    <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Cidade</label>
-                    <input value={city} onChange={e => setCity(e.target.value)} onKeyDown={e => e.key==="Enter" && doSearch()} style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 }} />
-                  </div>
-                  <div style={{ flex:"2 1 180px" }}>
-                    <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Categoria / Segmento</label>
-                    <input value={category} onChange={e => setCategory(e.target.value)} onKeyDown={e => e.key==="Enter" && doSearch()} placeholder="ex: pizzaria, clínica, academia..." style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 }} />
-                  </div>
-                  <div style={{ flex:"0 1 120px" }}>
-                    <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Mín. avaliações</label>
-                    <input type="number" value={minReviews} onChange={e => setMinReviews(+e.target.value)} style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontFamily:"'Space Mono',monospace", fontSize:13 }} />
-                  </div>
-                  <button onClick={doSearch} disabled={loading} style={{
-                    background: loading ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-                    color: loading ? "#3d4559" : "#0c0f14", border:"none", borderRadius:7,
-                    padding:"9px 20px", fontFamily:"'Space Mono',monospace", fontWeight:700,
-                    fontSize:12, cursor: loading ? "default" : "pointer", letterSpacing:1, whiteSpace:"nowrap"
-                  }}>{loading ? "BUSCANDO..." : "BUSCAR →"}</button>
-                </div>
-              </div>
-
-              {error && <div style={{ background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)", borderRadius:7, padding:"10px 14px", color:"#f87171", fontSize:12 }}>{error}</div>}
-
-              {results.length > 0 && (
-                <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                  <span style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" }}>{results.length} resultados</span>
-                  <div style={{ flex:1 }} />
-                  <button onClick={scoreAll} disabled={!!scoringId} style={{ background:"rgba(74,222,128,0.1)", border:"1px solid rgba(74,222,128,0.25)", color:"#4ade80", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" }}>⚡ Score IA em todos</button>
-                  <button onClick={() => results.forEach(p => addToPipeline(p))} style={{ background:"rgba(56,189,248,0.1)", border:"1px solid rgba(56,189,248,0.25)", color:"#38bdf8", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" }}>+ Todos no pipeline</button>
-                </div>
-              )}
-
-              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                {results.map((place, i) => (
-                  <PlaceCard key={place.id} place={place} index={i}
-                    onScore={scorePlace} onAdd={addToPipeline}
-                    scoring={scoringId === place.id}
-                    inPipeline={!!pipeline.find(p => p.id === place.id)} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {tab === "pipeline" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-                {STATUSES.map(s => (
-                  <div key={s.id} style={{ background:s.bg, border:`1px solid ${s.color}30`, borderRadius:8, padding:"10px 16px", flex:"1 1 120px" }}>
-                    <div style={{ fontFamily:"'Space Mono',monospace", fontSize:20, fontWeight:700, color:s.color }}>{pipelineByStatus[s.id]}</div>
-                    <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {pipeline.length > 0 ? (
-                <>
-                  <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                    <button onClick={exportExcel} style={{ background:"linear-gradient(135deg,#4ade80,#22c55e)", color:"#0c0f14", border:"none", borderRadius:7, padding:"8px 18px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:11, cursor:"pointer", letterSpacing:1 }}>↓ EXPORTAR EXCEL</button>
-                  </div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {STATUSES.flatMap(s => pipeline.filter(p => p.status === s.id)).map(p => (
-                      <PipelineRow key={p.id} prospect={p} onStatusChange={updateStatus} onRemove={removeFromPipeline} />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div style={{ textAlign:"center", padding:"60px 20px", color:"#3d4559", fontFamily:"'Space Mono',monospace", fontSize:12 }}>
-                  Pipeline vazio.<br/><span style={{ color:"#64748b" }}>Adicione prospects na aba Busca.</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <div style={{ flex:1 }} />
+        {["config","search","pipeline"].map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{
+            background: tab===t ? "rgba(56,189,248,0.1)" : "transparent",
+            border: tab===t ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
+            color: tab===t ? "#38bdf8" : "#64748b",
+            padding:"6px 14px", borderRadius:6, cursor:"pointer",
+            fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase"
+          }}>
+            {t==="config" ? "⚙ Config" : t==="search" ? "🔍 Busca" : `📋 Pipeline${pipeline.length>0?` (${pipeline.length})`:""}`}
+          </button>
+        ))}
       </div>
-    </>
+
+      <div style={{ maxWidth:900, margin:"0 auto", padding:"24px 16px" }}>
+
+        {tab === "config" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:16, maxWidth:520, margin:"0 auto" }}>
+            <div style={{ fontFamily:"'Space Mono',monospace", fontSize:11, color:"#64748b", letterSpacing:2, textTransform:"uppercase" }}>Configuração de chaves de API</div>
+            <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:20, display:"flex", flexDirection:"column", gap:14 }}>
+              {[
+                { label:"Chave Google (Places API New)", hint:"AIza...", val:googleKey, set:setGoogleKey, note:'Ative "Places API (New)" no Google Cloud' },
+                { label:"Chave Anthropic API (Score IA)", hint:"sk-ant-...", val:anthropicKey, set:setAnthropicKey, note:"Opcional — para score e pitch gerados por IA" },
+              ].map(f => (
+                <div key={f.label}>
+                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b", display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:1 }}>{f.label}</label>
+                  <input type="password" value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.hint} style={{
+                    width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6,
+                    padding:"9px 12px", color:"#e2e8f0", fontFamily:"'Space Mono',monospace", fontSize:12
+                  }} />
+                  <div style={{ fontSize:11, color:"#3d4559", marginTop:4 }}>{f.note}</div>
+                </div>
+              ))}
+              <button onClick={saveKeys} style={{
+                background: keySaved ? "linear-gradient(135deg,#4ade80,#22c55e)" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
+                color:"#0c0f14", border:"none", borderRadius:7, padding:"10px 20px",
+                fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:12, cursor:"pointer", letterSpacing:1
+              }}>{keySaved ? "✓ SALVO!" : "SALVAR E CONTINUAR →"}</button>
+            </div>
+            <div style={{ background:"rgba(245,158,11,0.05)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:8, padding:14 }}>
+              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#f59e0b", marginBottom:6 }}>⚠ IMPORTANTE — APIs necessárias no Google Cloud</div>
+              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.8 }}>
+                1. <strong style={{color:"#e2e8f0"}}>Places API (New)</strong> — para retornar dados dos estabelecimentos<br/>
+                Ative em: APIs e Serviços → Biblioteca
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === "search" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:16 }}>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end" }}>
+                <div style={{ flex:"1 1 130px" }}>
+                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Cidade</label>
+                  <input value={city} onChange={e => setCity(e.target.value)} onKeyDown={e => e.key==="Enter" && doSearch()} style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 }} />
+                </div>
+                <div style={{ flex:"2 1 180px" }}>
+                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Categoria / Segmento</label>
+                  <input value={category} onChange={e => setCategory(e.target.value)} onKeyDown={e => e.key==="Enter" && doSearch()} placeholder="ex: pizzaria, clínica, academia..." style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 }} />
+                </div>
+                <div style={{ flex:"0 1 120px" }}>
+                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Mín. avaliações</label>
+                  <input type="number" value={minReviews} onChange={e => setMinReviews(+e.target.value)} style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontFamily:"'Space Mono',monospace", fontSize:13 }} />
+                </div>
+                <button onClick={doSearch} disabled={loading} style={{
+                  background: loading ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
+                  color: loading ? "#3d4559" : "#0c0f14", border:"none", borderRadius:7,
+                  padding:"9px 20px", fontFamily:"'Space Mono',monospace", fontWeight:700,
+                  fontSize:12, cursor: loading ? "default" : "pointer", letterSpacing:1, whiteSpace:"nowrap"
+                }}>{loading ? "BUSCANDO..." : "BUSCAR →"}</button>
+              </div>
+            </div>
+
+            {error && <div style={{ background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)", borderRadius:7, padding:"10px 14px", color:"#f87171", fontSize:12 }}>{error}</div>}
+
+            {results.length > 0 && (
+              <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                <span style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" }}>{results.length} resultados</span>
+                <div style={{ flex:1 }} />
+                <button onClick={scoreAll} disabled={!!scoringId} style={{ background:"rgba(74,222,128,0.1)", border:"1px solid rgba(74,222,128,0.25)", color:"#4ade80", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" }}>⚡ Score IA em todos</button>
+                <button onClick={() => results.forEach(p => addToPipeline(p))} style={{ background:"rgba(56,189,248,0.1)", border:"1px solid rgba(56,189,248,0.25)", color:"#38bdf8", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" }}>+ Todos no pipeline</button>
+              </div>
+            )}
+
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {results.map((place, i) => (
+                <PlaceCard key={place.id} place={place} index={i}
+                  onScore={scorePlace} onAdd={addToPipeline}
+                  scoring={scoringId === place.id}
+                  inPipeline={!!pipeline.find(p => p.id === place.id)} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab === "pipeline" && (
+          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+            <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+              {STATUSES.map(s => (
+                <div key={s.id} style={{ background:s.bg, border:`1px solid ${s.color}30`, borderRadius:8, padding:"10px 16px", flex:"1 1 120px" }}>
+                  <div style={{ fontFamily:"'Space Mono',monospace", fontSize:20, fontWeight:700, color:s.color }}>{pipelineByStatus[s.id]}</div>
+                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+
+            {pipeline.length > 0 ? (
+              <>
+                <div style={{ display:"flex", justifyContent:"flex-end" }}>
+                  <button onClick={exportExcel} style={{ background:"linear-gradient(135deg,#4ade80,#22c55e)", color:"#0c0f14", border:"none", borderRadius:7, padding:"8px 18px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:11, cursor:"pointer", letterSpacing:1 }}>↓ EXPORTAR EXCEL</button>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {STATUSES.flatMap(s => pipeline.filter(p => p.status === s.id)).map(p => (
+                    <PipelineRow key={p.id} prospect={p} onStatusChange={updateStatus} onRemove={removeFromPipeline} />
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div style={{ textAlign:"center", padding:"60px 20px", color:"#3d4559", fontFamily:"'Space Mono',monospace", fontSize:12 }}>
+                Pipeline vazio.<br/><span style={{ color:"#64748b" }}>Adicione prospects na aba Busca.</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
