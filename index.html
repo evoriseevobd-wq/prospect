@@ -264,6 +264,7 @@ function App() {
   const [results, setResults] = useState([]);
   const [pipeline, setPipeline] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingPage, setLoadingPage] = useState(0);
   const [scoringId, setScoringId] = useState(null);
   const [keySaved, setKeySaved] = useState(false);
   const [error, setError] = useState("");
@@ -298,39 +299,66 @@ function App() {
       setError("Preencha cidade, categoria e configure as chaves na aba Config.");
       return;
     }
-    setError(""); setLoading(true); setResults([]);
+    setError(""); setLoading(true); setLoadingPage(0); setResults([]);
+
+    const HEADERS = {
+      "Content-Type": "application/json",
+      "X-Goog-Api-Key": googleKey,
+      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.regularOpeningHours,nextPageToken"
+    };
+
+    function mapPlace(p) {
+      return {
+        id: p.id,
+        name: p.displayName?.text || "Sem nome",
+        address: p.formattedAddress || "",
+        phone: p.nationalPhoneNumber || "N/D",
+        rating: p.rating || 0,
+        reviewCount: p.userRatingCount || 0,
+        weekdayText: p.regularOpeningHours?.weekdayDescriptions || [],
+        category, city,
+        score: null, grade: null, scoreExplanation: null, pitch: null
+      };
+    }
+
     try {
-      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": googleKey,
-          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.regularOpeningHours"
-        },
-        body: JSON.stringify({ textQuery: `${category} em ${city}`, languageCode: "pt-BR", maxResultCount: 20 })
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      const places = (data.places || [])
-        .filter(p => (p.userRatingCount || 0) >= minReviews)
-        .map(p => ({
-          id: p.id,
-          name: p.displayName?.text || "Sem nome",
-          address: p.formattedAddress || "",
-          phone: p.nationalPhoneNumber || "N/D",
-          rating: p.rating || 0,
-          reviewCount: p.userRatingCount || 0,
-          weekdayText: p.regularOpeningHours?.weekdayDescriptions || [],
-          category, city,
-          score: null, grade: null, scoreExplanation: null, pitch: null
-        }));
-      setResults(places);
-      if (places.length === 0) setError(`Nenhum resultado com ${minReviews}+ avaliações. Tente diminuir o filtro.`);
+      let allPlaces = [];
+      let pageToken = null;
+      let page = 0;
+
+      do {
+        const body = { textQuery: `${category} em ${city}`, languageCode: "pt-BR", maxResultCount: 20 };
+        if (pageToken) body.pageToken = pageToken;
+
+        const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST", headers: HEADERS, body: JSON.stringify(body)
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error?.message || `HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        const batch = (data.places || []).map(mapPlace);
+        allPlaces = [...allPlaces, ...batch];
+        pageToken = data.nextPageToken || null;
+        page++;
+        setLoadingPage(page);
+
+        // Mostra resultados parciais já na tela enquanto carrega
+        const filtered = allPlaces.filter(p => p.reviewCount >= minReviews);
+        setResults([...filtered]);
+
+        // Pequena pausa entre páginas (API recomenda)
+        if (pageToken && page < 5) await new Promise(r => setTimeout(r, 800));
+
+      } while (pageToken && page < 5);
+
+      const filtered = allPlaces.filter(p => p.reviewCount >= minReviews);
+      setResults(filtered);
+      if (filtered.length === 0) setError(`Nenhum resultado com ${minReviews}+ avaliações. Tente diminuir o filtro.`);
     } catch (e) { setError("Erro: " + e.message); }
     setLoading(false);
+    setLoadingPage(0);
   }
 
   async function scorePlace(place, index) {
@@ -503,7 +531,7 @@ Critérios de grade: A=80-100, B=60-79, C=40-59, D=0-39`;
                   color: loading ? "#3d4559" : "#0c0f14", border:"none", borderRadius:7,
                   padding:"9px 20px", fontFamily:"'Space Mono',monospace", fontWeight:700,
                   fontSize:12, cursor: loading ? "default" : "pointer", letterSpacing:1, whiteSpace:"nowrap"
-                }}>{loading ? "BUSCANDO..." : "BUSCAR →"}</button>
+                }}>{loading ? `BUSCANDO... ${loadingPage > 0 ? `(pág ${loadingPage}/5)` : ""}` : "BUSCAR →"}</button>
               </div>
             </div>
 
