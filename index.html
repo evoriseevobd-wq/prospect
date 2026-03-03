@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
 <style>
@@ -285,6 +286,142 @@ function PipelineRow(props) {
   );
 }
 
+function Dashboard(props) {
+  var pipeline = props.pipeline;
+  var statuses = props.statuses;
+  var { useEffect, useRef } = React;
+
+  // --- Compute stats ---
+  var total = pipeline.length;
+  var contacted = pipeline.filter(function(p) { return p.status !== "none"; }).length;
+  var closed = pipeline.filter(function(p) { return p.status === "closed"; }).length;
+  var convRate = total > 0 ? Math.round((closed/total)*100) : 0;
+
+  // Calls per day - track transitions by addedAt date as proxy (use addedAt for "contacted" ones)
+  var callsByDay = {};
+  pipeline.forEach(function(p) {
+    if (p.status !== "none") {
+      var d = new Date(p.addedAt).toLocaleDateString("pt-BR");
+      callsByDay[d] = (callsByDay[d]||0) + 1;
+    }
+  });
+  var callDays = Object.keys(callsByDay).sort(function(a,b) {
+    var pa = a.split("/").reverse().join("-");
+    var pb = b.split("/").reverse().join("-");
+    return pa > pb ? 1 : -1;
+  });
+  var callValues = callDays.map(function(d) { return callsByDay[d]; });
+
+  // Status distribution
+  var statusLabels = statuses.map(function(s) { return s.label; });
+  var statusValues = statuses.map(function(s) { return pipeline.filter(function(p) { return p.status===s.id; }).length; });
+  var statusColors = statuses.map(function(s) { return s.color; });
+
+  // Score distribution
+  var scored = pipeline.filter(function(p) { return p.score !== null; });
+  var avgScore = scored.length > 0 ? Math.round(scored.reduce(function(a,p) { return a+p.score; }, 0) / scored.length) : 0;
+  var gradeCount = { A:0, B:0, C:0, D:0 };
+  scored.forEach(function(p) { if (gradeCount[p.grade] !== undefined) gradeCount[p.grade]++; });
+
+  // Chart refs
+  var callsRef = useRef(null);
+  var statusRef = useRef(null);
+  var gradeRef = useRef(null);
+  var callsChart = useRef(null);
+  var statusChart = useRef(null);
+  var gradeChart = useRef(null);
+
+  useEffect(function() {
+    if (callsRef.current) {
+      if (callsChart.current) callsChart.current.destroy();
+      callsChart.current = new Chart(callsRef.current, {
+        type: "bar",
+        data: {
+          labels: callDays.length > 0 ? callDays : ["Sem dados"],
+          datasets: [{ label: "Contatos", data: callDays.length > 0 ? callValues : [0], backgroundColor: "rgba(56,189,248,0.5)", borderColor: "#38bdf8", borderWidth: 1, borderRadius: 4 }]
+        },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{color:"#64748b",font:{size:10}}, grid:{color:"#1e2535"} }, y:{ ticks:{color:"#64748b",font:{size:10},stepSize:1}, grid:{color:"#1e2535"}, beginAtZero:true } } }
+      });
+    }
+    if (statusRef.current) {
+      if (statusChart.current) statusChart.current.destroy();
+      statusChart.current = new Chart(statusRef.current, {
+        type: "doughnut",
+        data: { labels: statusLabels, datasets: [{ data: statusValues, backgroundColor: statusColors.map(function(c) { return c+"99"; }), borderColor: statusColors, borderWidth: 2 }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ position:"right", labels:{ color:"#94a3b8", font:{size:10}, boxWidth:12 } } }, cutout:"65%" }
+      });
+    }
+    if (gradeRef.current) {
+      if (gradeChart.current) gradeChart.current.destroy();
+      gradeChart.current = new Chart(gradeRef.current, {
+        type: "bar",
+        data: {
+          labels: ["A (80-100)", "B (60-79)", "C (40-59)", "D (0-39)"],
+          datasets: [{ data: [gradeCount.A, gradeCount.B, gradeCount.C, gradeCount.D], backgroundColor: ["rgba(74,222,128,0.5)","rgba(163,230,53,0.5)","rgba(245,158,11,0.5)","rgba(248,113,113,0.5)"], borderColor: ["#4ade80","#a3e635","#f59e0b","#f87171"], borderWidth:1, borderRadius:4 }]
+        },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ ticks:{color:"#64748b",font:{size:10}}, grid:{color:"#1e2535"} }, y:{ ticks:{color:"#64748b",font:{size:10},stepSize:1}, grid:{color:"#1e2535"}, beginAtZero:true } } }
+      });
+    }
+    return function() {
+      if (callsChart.current) callsChart.current.destroy();
+      if (statusChart.current) statusChart.current.destroy();
+      if (gradeChart.current) gradeChart.current.destroy();
+    };
+  }, [pipeline, statuses]);
+
+  var statCards = [
+    { label:"Total no pipeline", value:total, color:"#38bdf8" },
+    { label:"Contatados", value:contacted, color:"#f59e0b" },
+    { label:"Fechados", value:closed, color:"#4ade80" },
+    { label:"Taxa de fechamento", value:convRate+"%", color:"#a78bfa" },
+    { label:"Score medio (IA)", value: scored.length > 0 ? avgScore : "—", color:"#34d399" },
+    { label:"Com score", value:scored.length, color:"#fb923c" },
+  ];
+
+  return h("div", { style: { display:"flex", flexDirection:"column", gap:20 } },
+
+    // Stat cards
+    h("div", { style: { display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(140px, 1fr))", gap:10 } },
+      statCards.map(function(sc, i) {
+        return h("div", { key:i, style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:"14px 16px" } },
+          h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:26, fontWeight:700, color:sc.color } }, sc.value),
+          h("div", { style: { fontSize:11, color:"#64748b", marginTop:4 } }, sc.label)
+        );
+      })
+    ),
+
+    // Charts row
+    h("div", { style: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 } },
+
+      // Calls per day
+      h("div", { style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16 } },
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#38bdf8", letterSpacing:2, textTransform:"uppercase", marginBottom:12 } }, "Contatos por dia"),
+        h("div", { style: { height:180, position:"relative" } },
+          h("canvas", { ref:callsRef })
+        )
+      ),
+
+      // Status distribution
+      h("div", { style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16 } },
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#a78bfa", letterSpacing:2, textTransform:"uppercase", marginBottom:12 } }, "Distribuicao por status"),
+        h("div", { style: { height:180, position:"relative" } },
+          h("canvas", { ref:statusRef })
+        )
+      )
+    ),
+
+    // Grade distribution full width
+    h("div", { style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16 } },
+      h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#4ade80", letterSpacing:2, textTransform:"uppercase", marginBottom:12 } }, "Distribuicao de grades IA"),
+      scored.length === 0
+        ? h("div", { style: { textAlign:"center", padding:"40px 0", color:"#3d4559", fontFamily:"'Space Mono',monospace", fontSize:11 } }, "Nenhum prospect com score ainda.")
+        : h("div", { style: { height:160, position:"relative" } },
+            h("canvas", { ref:gradeRef })
+          )
+    )
+  );
+}
+
 function App() {
   var u = useState(false); var unlocked = u[0]; var setUnlocked = u[1];
   var t = useState("search"); var tab = t[0]; var setTab = t[1];
@@ -440,7 +577,8 @@ function App() {
       ),
       h("div", { style: {flex:1} }),
       h("button", { onClick: function() { setTab("search"); }, style: { background: tab==="search" ? "rgba(56,189,248,0.1)" : "transparent", border: tab==="search" ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent", color: tab==="search" ? "#38bdf8" : "#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase" } }, "\uD83D\uDD0D Busca"),
-      h("button", { onClick: function() { setTab("pipeline"); }, style: { background: tab==="pipeline" ? "rgba(56,189,248,0.1)" : "transparent", border: tab==="pipeline" ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent", color: tab==="pipeline" ? "#38bdf8" : "#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase" } }, "\uD83D\uDCCB Pipeline"+(pipeline.length>0 ? " ("+pipeline.length+")" : ""))
+      h("button", { onClick: function() { setTab("pipeline"); }, style: { background: tab==="pipeline" ? "rgba(56,189,248,0.1)" : "transparent", border: tab==="pipeline" ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent", color: tab==="pipeline" ? "#38bdf8" : "#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase" } }, "\uD83D\uDCCB Pipeline"+(pipeline.length>0 ? " ("+pipeline.length+")" : "")),
+      h("button", { onClick: function() { setTab("dashboard"); }, style: { background: tab==="dashboard" ? "rgba(74,222,128,0.1)" : "transparent", border: tab==="dashboard" ? "1px solid rgba(74,222,128,0.3)" : "1px solid transparent", color: tab==="dashboard" ? "#4ade80" : "#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase" } }, "\uD83D\uDCC8 Dashboard")
     ),
 
     // CONTENT
@@ -518,6 +656,9 @@ function App() {
             )
       )
     ),
+
+    // DASHBOARD TAB
+    tab === "dashboard" && h(Dashboard, { pipeline: pipeline, statuses: statuses }),
 
     showStatusMgr && h(StatusManager, { statuses:statuses, onSave:handleSaveStatuses, onClose: function() { setShowStatusMgr(false); } })
   );
