@@ -483,11 +483,10 @@ function App() {
   function fetchHoursForPipeline() {
     var toUpdate = pipeline.filter(function(p) { return !p.weekdayText || p.weekdayText.length === 0; });
     if (toUpdate.length === 0) { alert("Todos os leads ja tem horario!"); return; }
-    var HEADERS = { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.regularOpeningHours,places.currentOpeningHours" };
     var updated = pipeline.slice();
     var done = 0;
     toUpdate.forEach(function(p) {
-      fetch("https://places.googleapis.com/v1/places/"+p.id, { method:"GET", headers:HEADERS })
+      fetch("https://places.googleapis.com/v1/places/"+p.id+"?fields=regularOpeningHours,currentOpeningHours&key="+GOOGLE_KEY, { method:"GET", headers:{"Content-Type":"application/json", "X-Goog-FieldMask":"regularOpeningHours,currentOpeningHours"} })
         .then(function(res) { return res.json(); })
         .then(function(data) {
           var hours = (data.regularOpeningHours&&data.regularOpeningHours.weekdayDescriptions)||[];
