@@ -204,6 +204,32 @@ function StatusManager(props) {
   );
 }
 
+function HoursDisplay(props) {
+  var exp = useState(false); var expanded = exp[0]; var setExpanded = exp[1];
+  var weekdayText = props.weekdayText || [];
+  var today = new Date().getDay();
+  // Google returns Mon=0...Sun=6, JS getDay() returns Sun=0,Mon=1...Sat=6
+  var todayIndex = today === 0 ? 6 : today - 1;
+  var todayLine = weekdayText[todayIndex] || "";
+
+  return h("div", { style: { marginTop:6 } },
+    h("div", {
+      onClick: function(e) { e.stopPropagation(); setExpanded(!expanded); },
+      style: { display:"flex", alignItems:"center", gap:6, cursor:"pointer", userSelect:"none" }
+    },
+      h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b" } }, "⏰"),
+      h("span", { style: { fontSize:11, color:"#e2e8f0", flex:1 } }, todayLine || "Horario nao disponivel"),
+      h("span", { style: { fontSize:10, color:"#64748b", transition:"transform 0.2s", display:"inline-block", transform: expanded ? "rotate(180deg)" : "rotate(0deg)" } }, "▾")
+    ),
+    expanded && h("div", { style: { marginTop:5, display:"flex", flexDirection:"column", gap:2, paddingLeft:16, borderLeft:"1px solid #1e2535" } },
+      weekdayText.map(function(line, i) {
+        var isToday = i === todayIndex;
+        return h("div", { key:i, style: { fontSize:11, color: isToday ? "#38bdf8" : "#64748b", fontWeight: isToday ? 600 : 400 } }, line);
+      })
+    )
+  );
+}
+
 function PlaceCard(props) {
   var exp = useState(false); var expanded = exp[0]; var setExpanded = exp[1];
   var place = props.place; var index = props.index;
@@ -229,15 +255,7 @@ function PlaceCard(props) {
             place.isOpen ? "\u25cf Aberto agora" : "\u25cf Fechado agora"
           )
         ),
-        place.weekdayText && place.weekdayText.length > 0 && h("div", { style: { marginTop:6, display:"flex", flexDirection:"column", gap:2 } },
-          h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", textTransform:"uppercase", letterSpacing:1, marginBottom:3 } }, "\u23F0 Horarios"),
-          place.weekdayText.map(function(line, i) {
-            var today = new Date().getDay();
-            var dayOrder = [6,0,1,2,3,4,5];
-            var isToday = dayOrder[today] === i;
-            return h("div", { key:i, style: { fontSize:11, color: isToday ? "#e2e8f0" : "#64748b", fontWeight: isToday ? 600 : 400, background: isToday ? "rgba(56,189,248,0.07)" : "transparent", borderRadius:3, padding: isToday ? "1px 5px" : "1px 0" } }, line);
-          })
-        )
+        place.weekdayText && place.weekdayText.length > 0 && h(HoursDisplay, { weekdayText: place.weekdayText })
       ),
       h("div", { style: { display:"flex", flexDirection:"column", gap:6, flexShrink:0 } },
         h("button", { onClick: function() { props.onAdd(place); }, disabled: props.inPipeline, style: { background: props.inPipeline ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)", color: props.inPipeline ? "#3d4559" : "#0c0f14", border:"none", padding:"6px 12px", borderRadius:5, fontSize:11, fontWeight:700, fontFamily:"'Space Mono',monospace", cursor: props.inPipeline ? "default" : "pointer", whiteSpace:"nowrap" } },
