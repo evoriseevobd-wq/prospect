@@ -6,748 +6,514 @@
 <title>ProspectIQ</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body, #root { height: 100%; }
-  body { background: #0c0f14; }
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: #0c0f14; }
-  ::-webkit-scrollbar-thumb { background: #2a3142; border-radius: 2px; }
-  input::placeholder { color: #3d4559; }
-  textarea::placeholder { color: #3d4559; }
-  @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
-  @keyframes shakeX {
-    0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)}
-    40%{transform:translateX(8px)} 60%{transform:translateX(-8px)} 80%{transform:translateX(8px)}
-  }
-  @keyframes scanline { 0%{top:-10%} 100%{top:110%} }
-  .card-enter { animation: fadeUp 0.35s ease forwards; }
-  .scanning { position: relative; overflow: hidden; }
-  .scanning::after {
-    content:''; position:absolute; left:0; right:0; height:1px;
-    background: linear-gradient(90deg,transparent,rgba(56,189,248,0.6),transparent);
-    animation: scanline 1.8s linear infinite;
-    top: 0;
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body, #root { height: 100%; }
+body { background: #0c0f14; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #0c0f14; }
+::-webkit-scrollbar-thumb { background: #2a3142; border-radius: 2px; }
+input::placeholder { color: #3d4559; }
+textarea::placeholder { color: #3d4559; }
+@keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes shakeX { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-8px)} 80%{transform:translateX(8px)} }
+@keyframes scanline { 0%{top:-10%} 100%{top:110%} }
+.card-enter { animation: fadeUp 0.35s ease forwards; }
+.scanning { position: relative; overflow: hidden; }
+.scanning::after { content:''; position:absolute; left:0; right:0; height:1px; background: linear-gradient(90deg,transparent,rgba(56,189,248,0.6),transparent); animation: scanline 1.8s linear infinite; top: 0; }
 </style>
 </head>
 <body>
 <div id="root"></div>
-
-<script type="text/babel">
-const { useState, useEffect } = React;
-
+<script>
+const GOOGLE_KEY = "AIzaSyC6THiLbBkFrVCT-tcG0gFHkXV3vVHVjx0";
+const GEMINI_KEY = "AIzaSyDFp-3hiwGxzYKjzFY3QpIKlNkgQ8-xP00";
 const CORRECT_PASSWORD = "1235";
+
 const DEFAULT_STATUSES = [
-  { id: "none",      label: "Não contatado",   color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
-  { id: "called",    label: "Ligação feita",   color: "#f59e0b", bg: "rgba(245,158,11,0.12)"  },
-  { id: "followup",  label: "Follow Up",       color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
-  { id: "meeting",   label: "Reunião marcada", color: "#38bdf8", bg: "rgba(56,189,248,0.12)"  },
-  { id: "closed",    label: "Fechado/Cliente", color: "#4ade80", bg: "rgba(74,222,128,0.12)"  },
-  { id: "finished",  label: "Finalizado",      color: "#64748b", bg: "rgba(100,116,139,0.12)" },
+  { id: "none",     label: "Nao contatado",   color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
+  { id: "called",   label: "Ligacao feita",   color: "#f59e0b", bg: "rgba(245,158,11,0.12)"  },
+  { id: "followup", label: "Follow Up",       color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
+  { id: "meeting",  label: "Reuniao marcada", color: "#38bdf8", bg: "rgba(56,189,248,0.12)"  },
+  { id: "closed",   label: "Fechado/Cliente", color: "#4ade80", bg: "rgba(74,222,128,0.12)"  },
+  { id: "finished", label: "Finalizado",      color: "#64748b", bg: "rgba(100,116,139,0.12)" },
 ];
+
 const PALETTE = ["#94a3b8","#f59e0b","#a78bfa","#38bdf8","#4ade80","#64748b","#f87171","#fb923c","#34d399","#e879f9","#22d3ee","#facc15"];
-
-function bgFromColor(hex) {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-  return `rgba(${r},${g},${b},0.12)`;
-}
-
-function StatusManager({ statuses, onSave, onClose }) {
-  const [list, setList] = React.useState(statuses.map(s => ({...s})));
-  const [newLabel, setNewLabel] = React.useState("");
-  const [newColor, setNewColor] = React.useState("#38bdf8");
-
-  function addStatus() {
-    if (!newLabel.trim()) return;
-    const id = "custom_" + Date.now();
-    setList(prev => [...prev, { id, label: newLabel.trim(), color: newColor, bg: bgFromColor(newColor) }]);
-    setNewLabel("");
-  }
-
-  function removeStatus(id) {
-    if (id === "none") return;
-    setList(prev => prev.filter(s => s.id !== id));
-  }
-
-  function updateLabel(id, label) {
-    setList(prev => prev.map(s => s.id === id ? {...s, label} : s));
-  }
-
-  function updateColor(id, color) {
-    setList(prev => prev.map(s => s.id === id ? {...s, color, bg: bgFromColor(color)} : s));
-  }
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#131720", border:"1px solid #2a3142", borderRadius:12, width:"100%", maxWidth:480, maxHeight:"85vh", overflow:"auto", padding:24, display:"flex", flexDirection:"column", gap:16 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:12, color:"#38bdf8", letterSpacing:2, textTransform:"uppercase" }}>Gerenciar Status</div>
-          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", fontSize:20, cursor:"pointer" }}>×</button>
-        </div>
-
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {list.map(s => (
-            <div key={s.id} style={{ display:"flex", alignItems:"center", gap:8, background:"#0c0f14", borderRadius:7, padding:"8px 10px", border:`1px solid ${s.color}30` }}>
-              <div style={{ display:"flex", gap:3, flexWrap:"wrap", width:88, flexShrink:0 }}>
-                {PALETTE.map(c => (
-                  <div key={c} onClick={() => updateColor(s.id, c)} style={{
-                    width:14, height:14, borderRadius:"50%", background:c, cursor:"pointer",
-                    border: s.color === c ? "2px solid #fff" : "2px solid transparent", flexShrink:0
-                  }} />
-                ))}
-              </div>
-              <input value={s.label} onChange={e => updateLabel(s.id, e.target.value)}
-                style={{ flex:1, background:"transparent", border:"none", color:"#e2e8f0", fontSize:12, fontFamily:"'DM Sans',sans-serif", outline:"none" }} />
-              <div style={{ width:10, height:10, borderRadius:"50%", background:s.color, flexShrink:0 }} />
-              {s.id !== "none" && (
-                <button onClick={() => removeStatus(s.id)} style={{ background:"transparent", border:"none", color:"#f87171", cursor:"pointer", fontSize:18, lineHeight:1, padding:"0 4px" }}>×</button>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div style={{ borderTop:"1px solid #1e2535", paddingTop:12, display:"flex", flexDirection:"column", gap:8 }}>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", textTransform:"uppercase", letterSpacing:1 }}>Novo status</div>
-          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-            <input value={newLabel} onChange={e => setNewLabel(e.target.value)} onKeyDown={e => e.key==="Enter" && addStatus()}
-              placeholder="Nome do status..." style={{ flex:1, minWidth:120, background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"7px 10px", color:"#e2e8f0", fontSize:12 }} />
-            <div style={{ display:"flex", gap:3, flexWrap:"wrap", width:88 }}>
-              {PALETTE.map(c => (
-                <div key={c} onClick={() => setNewColor(c)} style={{
-                  width:14, height:14, borderRadius:"50%", background:c, cursor:"pointer",
-                  border: newColor === c ? "2px solid #fff" : "2px solid transparent"
-                }} />
-              ))}
-            </div>
-            <button onClick={addStatus} style={{ background:"linear-gradient(135deg,#38bdf8,#0ea5e9)", color:"#0c0f14", border:"none", borderRadius:6, padding:"7px 14px", fontFamily:"'Space Mono',monospace", fontSize:11, fontWeight:700, cursor:"pointer" }}>+ ADD</button>
-          </div>
-        </div>
-
-        <button onClick={() => onSave(list)} style={{ background:"linear-gradient(135deg,#4ade80,#22c55e)", color:"#0c0f14", border:"none", borderRadius:7, padding:"10px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:12, cursor:"pointer" }}>SALVAR ALTERAÇÕES ✓</button>
-      </div>
-    </div>
-  );
-}
 const GRADE_COLORS = { A: "#4ade80", B: "#a3e635", C: "#f59e0b", D: "#f87171" };
 
-const storage = {
-  get: (key) => {
-    try { const v = localStorage.getItem(key); return v ? { value: v } : null; } catch { return null; }
-  },
-  set: (key, value) => {
-    try { localStorage.setItem(key, value); return true; } catch { return null; }
-  }
-};
+const h = React.createElement;
+const { useState, useEffect } = React;
 
-function PasswordScreen({ onUnlock }) {
-  const [dots, setDots] = useState([]);
-  const [shake, setShake] = useState(false);
-  const keys = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
+function hexToBg(hex) {
+  var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return "rgba("+r+","+g+","+b+",0.12)";
+}
+function lsGet(key) {
+  try { var v = localStorage.getItem(key); return v ? JSON.parse(v) : null; } catch(e) { return null; }
+}
+function lsSet(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
+}
+
+function PasswordScreen(props) {
+  var s = useState([]); var dots = s[0]; var setDots = s[1];
+  var sk = useState(false); var shake = sk[0]; var setShake = sk[1];
+  var keys = ["1","2","3","4","5","6","7","8","9","","0","back"];
 
   function handleKey(k) {
     if (dots.length >= 4) return;
-    const next = [...dots, k];
+    var next = dots.concat(k);
     setDots(next);
     if (next.length === 4) {
-      setTimeout(() => {
-        if (next.join("") === CORRECT_PASSWORD) { onUnlock(); }
-        else { setShake(true); setTimeout(() => { setShake(false); setDots([]); }, 600); }
+      setTimeout(function() {
+        if (next.join("") === CORRECT_PASSWORD) { props.onUnlock(); }
+        else { setShake(true); setTimeout(function() { setShake(false); setDots([]); }, 600); }
       }, 200);
     }
   }
 
-  return (
-    <div style={{ minHeight:"100vh", background:"#0c0f14", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:32 }}>
-      <div style={{ textAlign:"center" }}>
-        <div style={{ fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:22, color:"#38bdf8", letterSpacing:3 }}>
-          PROSPECT<span style={{ color:"#4ade80" }}>IQ</span>
-        </div>
-        <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#3d4559", letterSpacing:3, marginTop:4 }}>ACESSO RESTRITO</div>
-      </div>
-      <div style={{ display:"flex", gap:16, animation: shake ? "shakeX 0.5s ease" : "none" }}>
-        {[0,1,2,3].map(i => (
-          <div key={i} style={{
-            width:16, height:16, borderRadius:"50%",
-            background: i < dots.length ? "#38bdf8" : "transparent",
-            border: `2px solid ${i < dots.length ? "#38bdf8" : "#2a3142"}`,
-            transition:"all 0.15s ease",
-            boxShadow: i < dots.length ? "0 0 8px rgba(56,189,248,0.6)" : "none"
-          }} />
-        ))}
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 72px)", gap:10 }}>
-        {keys.map((k, i) => (
-          <button key={i}
-            onClick={() => { if (k === "⌫") setDots(d => d.slice(0,-1)); else if (k !== "") handleKey(k); }}
-            disabled={k === ""}
-            style={{
-              width:72, height:72, borderRadius:12,
-              background: k === "" ? "transparent" : "#131720",
-              border: k === "" ? "none" : "1px solid #1e2535",
-              color: k === "⌫" ? "#64748b" : "#e2e8f0",
-              fontSize: k === "⌫" ? 18 : 22,
-              fontFamily:"'Space Mono',monospace", fontWeight:700,
-              cursor: k === "" ? "default" : "pointer"
-            }}>{k}</button>
-        ))}
-      </div>
-    </div>
+  return h("div", { style: { minHeight:"100vh", background:"#0c0f14", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:32 } },
+    h("div", { style: { textAlign:"center" } },
+      h("div", { style: { fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:22, color:"#38bdf8", letterSpacing:3 } },
+        "PROSPECT", h("span", { style: { color:"#4ade80" } }, "IQ")
+      ),
+      h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#3d4559", letterSpacing:3, marginTop:4 } }, "ACESSO RESTRITO")
+    ),
+    h("div", { style: { display:"flex", gap:16, animation: shake ? "shakeX 0.5s ease" : "none" } },
+      [0,1,2,3].map(function(i) {
+        return h("div", { key:i, style: { width:16, height:16, borderRadius:"50%", background: i < dots.length ? "#38bdf8" : "transparent", border: "2px solid " + (i < dots.length ? "#38bdf8" : "#2a3142"), transition:"all 0.15s ease", boxShadow: i < dots.length ? "0 0 8px rgba(56,189,248,0.6)" : "none" } });
+      })
+    ),
+    h("div", { style: { display:"grid", gridTemplateColumns:"repeat(3, 72px)", gap:10 } },
+      keys.map(function(k, i) {
+        return h("button", {
+          key:i,
+          onClick: function() {
+            if (k === "back") setDots(function(d) { return d.slice(0,-1); });
+            else if (k !== "") handleKey(k);
+          },
+          disabled: k === "",
+          style: { width:72, height:72, borderRadius:12, background: k==="" ? "transparent" : "#131720", border: k==="" ? "none" : "1px solid #1e2535", color: k==="back" ? "#64748b" : "#e2e8f0", fontSize: k==="back" ? 16 : 22, fontFamily:"'Space Mono',monospace", fontWeight:700, cursor: k==="" ? "default" : "pointer" }
+        }, k === "back" ? "\u232b" : k);
+      })
+    )
   );
 }
 
-function ScoreRing({ score, grade }) {
-  const r = 22; const c = 2 * Math.PI * r;
-  const color = GRADE_COLORS[grade] || "#94a3b8";
-  return (
-    <div style={{ position:"relative", width:60, height:60, flexShrink:0 }}>
-      <svg width="60" height="60" style={{ transform:"rotate(-90deg)" }}>
-        <circle cx="30" cy="30" r={r} fill="none" stroke="#1e2535" strokeWidth="4" />
-        <circle cx="30" cy="30" r={r} fill="none" stroke={color} strokeWidth="4"
-          strokeDasharray={`${(score/100)*c} ${c}`} strokeLinecap="round"
-          style={{ transition:"stroke-dasharray 0.8s ease" }} />
-      </svg>
-      <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <span style={{ fontFamily:"'Space Mono',monospace", fontSize:13, fontWeight:700, color, lineHeight:1 }}>{score}</span>
-        <span style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", marginTop:1 }}>{grade}</span>
-      </div>
-    </div>
+function ScoreRing(props) {
+  var r = 22, c = 2 * Math.PI * r;
+  var color = GRADE_COLORS[props.grade] || "#94a3b8";
+  var dash = (props.score/100)*c;
+  return h("div", { style: { position:"relative", width:60, height:60, flexShrink:0 } },
+    h("svg", { width:"60", height:"60", style: { transform:"rotate(-90deg)" } },
+      h("circle", { cx:"30", cy:"30", r:r, fill:"none", stroke:"#1e2535", strokeWidth:"4" }),
+      h("circle", { cx:"30", cy:"30", r:r, fill:"none", stroke:color, strokeWidth:"4", strokeDasharray: dash+" "+(c-dash), strokeLinecap:"round", style: { transition:"stroke-dasharray 0.8s ease" } })
+    ),
+    h("div", { style: { position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" } },
+      h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:13, fontWeight:700, color:color, lineHeight:1 } }, props.score),
+      h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", marginTop:1 } }, props.grade)
+    )
   );
 }
 
-function Stars({ rating }) {
-  const r = Math.round(rating || 0);
-  return (
-    <span style={{ fontFamily:"'Space Mono',monospace", fontSize:11, color:"#f59e0b", letterSpacing:1 }}>
-      {"★".repeat(r)}{"☆".repeat(5-r)}
-      <span style={{ color:"#64748b", marginLeft:4 }}>{(rating||0).toFixed(1)}</span>
-    </span>
+function Stars(props) {
+  var r = Math.round(props.rating || 0);
+  return h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:11, color:"#f59e0b", letterSpacing:1 } },
+    "\u2605".repeat(r) + "\u2606".repeat(5-r),
+    h("span", { style: { color:"#64748b", marginLeft:4 } }, (props.rating||0).toFixed(1))
   );
 }
 
-function StatusBadge({ status, onChange, statuses }) {
-  const s = statuses.find(x => x.id === status) || statuses[0];
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ position:"relative" }}>
-      <button onClick={() => setOpen(!open)} style={{
-        background:s.bg, border:`1px solid ${s.color}40`, color:s.color,
-        padding:"4px 10px", borderRadius:4, fontSize:11,
-        fontFamily:"'Space Mono',monospace", cursor:"pointer", whiteSpace:"nowrap"
-      }}>{s.label} ▾</button>
-      {open && (
-        <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:100, background:"#131720", border:"1px solid #2a3142", borderRadius:6, overflow:"hidden", minWidth:170 }}>
-          {statuses.map(st => (
-            <button key={st.id} onClick={() => { onChange(st.id); setOpen(false); }} style={{
-              display:"block", width:"100%", textAlign:"left", padding:"8px 12px",
-              background: st.id === status ? st.bg : "transparent",
-              border:"none", color:st.color, fontSize:11,
-              fontFamily:"'Space Mono',monospace", cursor:"pointer"
-            }}>{st.label}</button>
-          ))}
-        </div>
-      )}
-    </div>
+function StatusBadge(props) {
+  var found = props.statuses.find(function(x) { return x.id === props.status; });
+  var s = found || props.statuses[0];
+  var op = useState(false); var open = op[0]; var setOpen = op[1];
+  return h("div", { style: { position:"relative" } },
+    h("button", { onClick: function() { setOpen(!open); }, style: { background:s.bg, border:"1px solid "+s.color+"40", color:s.color, padding:"4px 10px", borderRadius:4, fontSize:11, fontFamily:"'Space Mono',monospace", cursor:"pointer", whiteSpace:"nowrap" } },
+      s.label + " \u25be"
+    ),
+    open && h("div", { style: { position:"absolute", top:"calc(100% + 4px)", left:0, zIndex:100, background:"#131720", border:"1px solid #2a3142", borderRadius:6, overflow:"hidden", minWidth:170 } },
+      props.statuses.map(function(st) {
+        return h("button", { key:st.id, onClick: function() { props.onChange(st.id); setOpen(false); }, style: { display:"block", width:"100%", textAlign:"left", padding:"8px 12px", background: st.id===props.status ? st.bg : "transparent", border:"none", color:st.color, fontSize:11, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, st.label);
+      })
+    )
   );
 }
 
-function PlaceCard({ place, index, onScore, onAdd, scoring, inPipeline }) {
-  const [expanded, setExpanded] = useState(false);
-  return (
-    <div className="card-enter" style={{
-      background:"#131720", border:"1px solid #1e2535", borderRadius:8,
-      padding:16, display:"flex", flexDirection:"column", gap:10,
-      animationDelay:`${index*0.04}s`, opacity:0, position:"relative", overflow:"hidden"
-    }}>
-      <div style={{ display:"flex", gap:12, alignItems:"flex-start" }}>
-        <div style={{ flexShrink:0 }}>
-          {place.score !== null ? (
-            <ScoreRing score={place.score} grade={place.grade} />
-          ) : (
-            <div style={{
-              width:60, height:60, border:"2px dashed #2a3142", borderRadius:"50%",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              cursor: scoring ? "default" : "pointer", color:"#3d4559",
-              fontSize:10, textAlign:"center", fontFamily:"'Space Mono',monospace",
-              flexShrink:0, position:"relative", whiteSpace:"pre-line", lineHeight:1.4
-            }} className={scoring ? "scanning" : ""} onClick={() => !scoring && onScore(place, index)}>
-              {scoring ? "..." : "IA\nScore"}
-            </div>
-          )}
-        </div>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:14, color:"#e2e8f0", marginBottom:3 }}>{place.name}</div>
-          <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:4 }}>
-            <Stars rating={place.rating} />
-            <span style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" }}>({place.reviewCount} avaliações)</span>
-          </div>
-          <div style={{ fontSize:12, color:"#64748b", marginBottom:2 }}>📍 {place.address}</div>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:12, color:"#38bdf8" }}>📞 {place.phone}</div>
-        </div>
-        <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
-          <button onClick={() => onAdd(place)} disabled={inPipeline} style={{
-            background: inPipeline ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-            color: inPipeline ? "#3d4559" : "#0c0f14", border:"none",
-            padding:"6px 12px", borderRadius:5, fontSize:11, fontWeight:700,
-            fontFamily:"'Space Mono',monospace", cursor: inPipeline ? "default" : "pointer", whiteSpace:"nowrap"
-          }}>{inPipeline ? "✓ No CRM" : "+ Pipeline"}</button>
-          {place.score !== null && (
-            <button onClick={() => setExpanded(!expanded)} style={{
-              background:"transparent", border:"1px solid #2a3142", color:"#64748b",
-              padding:"5px 10px", borderRadius:5, fontSize:10,
-              fontFamily:"'Space Mono',monospace", cursor:"pointer"
-            }}>{expanded ? "▲ ocultar" : "▼ detalhar"}</button>
-          )}
-        </div>
-      </div>
-      {expanded && place.scoreExplanation && (
-        <div style={{ borderTop:"1px solid #1e2535", paddingTop:10, display:"flex", flexDirection:"column", gap:8 }}>
-          <div style={{ background:"#0c0f14", borderRadius:6, padding:10, border:"1px solid #1e2535" }}>
-            <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", marginBottom:4, textTransform:"uppercase", letterSpacing:1 }}>Análise do Score</div>
-            <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5 }}>{place.scoreExplanation}</div>
-          </div>
-          <div style={{ background:"rgba(56,189,248,0.05)", borderRadius:6, padding:10, border:"1px solid rgba(56,189,248,0.15)" }}>
-            <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#38bdf8", marginBottom:4, textTransform:"uppercase", letterSpacing:1 }}>🎯 Pitch Sugerido</div>
-            <div style={{ fontSize:12, color:"#e2e8f0", lineHeight:1.6, fontStyle:"italic" }}>"{place.pitch}"</div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+function StatusManager(props) {
+  var ls = useState(props.statuses.map(function(s) { return Object.assign({}, s); })); var list = ls[0]; var setList = ls[1];
+  var nl = useState(""); var newLabel = nl[0]; var setNewLabel = nl[1];
+  var nc = useState("#38bdf8"); var newColor = nc[0]; var setNewColor = nc[1];
 
-function PipelineRow({ prospect, onStatusChange, onRemove, onObsChange, statuses }) {
-  const [editingObs, setEditingObs] = useState(false);
-  const [obsValue, setObsValue] = useState(prospect.obs || "");
-
-  function saveObs() {
-    onObsChange(prospect.id, obsValue);
-    setEditingObs(false);
+  function addStatus() {
+    if (!newLabel.trim()) return;
+    var id = "custom_" + Date.now();
+    setList(function(prev) { return prev.concat({ id:id, label:newLabel.trim(), color:newColor, bg:hexToBg(newColor) }); });
+    setNewLabel("");
+  }
+  function removeStatus(id) {
+    if (id === "none") return;
+    setList(function(prev) { return prev.filter(function(s) { return s.id !== id; }); });
+  }
+  function updateLabel(id, label) {
+    setList(function(prev) { return prev.map(function(s) { return s.id === id ? Object.assign({}, s, {label:label}) : s; }); });
+  }
+  function updateColor(id, color) {
+    setList(function(prev) { return prev.map(function(s) { return s.id === id ? Object.assign({}, s, {color:color, bg:hexToBg(color)}) : s; }); });
   }
 
-  return (
-    <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:"12px 16px", display:"flex", flexDirection:"column", gap:10 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-        {prospect.score !== null && <ScoreRing score={prospect.score} grade={prospect.grade} />}
-        <div style={{ flex:1, minWidth:160 }}>
-          <div style={{ fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:13, color:"#e2e8f0" }}>{prospect.name}</div>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" }}>{prospect.city} · {prospect.category}</div>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:11, color:"#38bdf8", marginTop:2 }}>{prospect.phone}</div>
-        </div>
-        <Stars rating={prospect.rating} />
-        <StatusBadge status={prospect.status} onChange={(s) => onStatusChange(prospect.id, s)} statuses={statuses} />
-        <button onClick={() => setEditingObs(!editingObs)} style={{
-          background: prospect.obs ? "rgba(167,139,250,0.1)" : "transparent",
-          border: prospect.obs ? "1px solid rgba(167,139,250,0.3)" : "1px solid #2a3142",
-          color: prospect.obs ? "#a78bfa" : "#64748b",
-          padding:"5px 10px", borderRadius:4, fontSize:10,
-          fontFamily:"'Space Mono',monospace", cursor:"pointer", whiteSpace:"nowrap"
-        }}>{prospect.obs ? "✎ obs" : "+ obs"}</button>
-        <button onClick={() => onRemove(prospect.id)} style={{
-          background:"transparent", border:"1px solid #2a3142", color:"#64748b",
-          width:28, height:28, borderRadius:4, cursor:"pointer", fontSize:14, flexShrink:0
-        }}>×</button>
-      </div>
+  return h("div", { style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 } },
+    h("div", { style: { background:"#131720", border:"1px solid #2a3142", borderRadius:12, width:"100%", maxWidth:480, maxHeight:"85vh", overflow:"auto", padding:24, display:"flex", flexDirection:"column", gap:16 } },
+      h("div", { style: { display:"flex", alignItems:"center", justifyContent:"space-between" } },
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:12, color:"#38bdf8", letterSpacing:2, textTransform:"uppercase" } }, "Gerenciar Status"),
+        h("button", { onClick: props.onClose, style: { background:"transparent", border:"none", color:"#64748b", fontSize:20, cursor:"pointer" } }, "\u00d7")
+      ),
+      h("div", { style: { display:"flex", flexDirection:"column", gap:8 } },
+        list.map(function(s) {
+          return h("div", { key:s.id, style: { display:"flex", alignItems:"center", gap:8, background:"#0c0f14", borderRadius:7, padding:"8px 10px", border:"1px solid "+s.color+"30" } },
+            h("div", { style: { display:"flex", gap:3, flexWrap:"wrap", width:90, flexShrink:0 } },
+              PALETTE.map(function(c) {
+                return h("div", { key:c, onClick: function() { updateColor(s.id, c); }, style: { width:14, height:14, borderRadius:"50%", background:c, cursor:"pointer", border: s.color===c ? "2px solid #fff" : "2px solid transparent", flexShrink:0 } });
+              })
+            ),
+            h("input", { value:s.label, onChange: function(e) { updateLabel(s.id, e.target.value); }, style: { flex:1, background:"transparent", border:"none", color:"#e2e8f0", fontSize:12, fontFamily:"'DM Sans',sans-serif", outline:"none" } }),
+            h("div", { style: { width:10, height:10, borderRadius:"50%", background:s.color, flexShrink:0 } }),
+            s.id !== "none" && h("button", { onClick: function() { removeStatus(s.id); }, style: { background:"transparent", border:"none", color:"#f87171", cursor:"pointer", fontSize:18, lineHeight:1, padding:"0 4px" } }, "\u00d7")
+          );
+        })
+      ),
+      h("div", { style: { borderTop:"1px solid #1e2535", paddingTop:12, display:"flex", flexDirection:"column", gap:8 } },
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", textTransform:"uppercase", letterSpacing:1 } }, "Novo status"),
+        h("div", { style: { display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" } },
+          h("input", { value:newLabel, onChange: function(e) { setNewLabel(e.target.value); }, onKeyDown: function(e) { if (e.key==="Enter") addStatus(); }, placeholder:"Nome do status...", style: { flex:1, minWidth:120, background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"7px 10px", color:"#e2e8f0", fontSize:12 } }),
+          h("div", { style: { display:"flex", gap:3, flexWrap:"wrap", width:90 } },
+            PALETTE.map(function(c) {
+              return h("div", { key:c, onClick: function() { setNewColor(c); }, style: { width:14, height:14, borderRadius:"50%", background:c, cursor:"pointer", border: newColor===c ? "2px solid #fff" : "2px solid transparent" } });
+            })
+          ),
+          h("button", { onClick:addStatus, style: { background:"linear-gradient(135deg,#38bdf8,#0ea5e9)", color:"#0c0f14", border:"none", borderRadius:6, padding:"7px 14px", fontFamily:"'Space Mono',monospace", fontSize:11, fontWeight:700, cursor:"pointer" } }, "+ ADD")
+        )
+      ),
+      h("button", { onClick: function() { props.onSave(list); }, style: { background:"linear-gradient(135deg,#4ade80,#22c55e)", color:"#0c0f14", border:"none", borderRadius:7, padding:"10px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:12, cursor:"pointer" } }, "SALVAR ALTERACOES \u2713")
+    )
+  );
+}
 
-      {editingObs && (
-        <div style={{ borderTop:"1px solid #1e2535", paddingTop:10, display:"flex", flexDirection:"column", gap:6 }}>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", textTransform:"uppercase", letterSpacing:1 }}>Observações</div>
-          <textarea
-            value={obsValue}
-            onChange={e => setObsValue(e.target.value)}
-            placeholder="Anote o que foi conversado, próximos passos, contato ideal..."
-            rows={3}
-            style={{
-              width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6,
-              padding:"8px 10px", color:"#e2e8f0", fontSize:12, resize:"vertical",
-              fontFamily:"'DM Sans',sans-serif", lineHeight:1.5
-            }}
-          />
-          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-            <button onClick={() => { setObsValue(prospect.obs || ""); setEditingObs(false); }} style={{
-              background:"transparent", border:"1px solid #2a3142", color:"#64748b",
-              padding:"5px 12px", borderRadius:5, fontSize:11, fontFamily:"'Space Mono',monospace", cursor:"pointer"
-            }}>cancelar</button>
-            <button onClick={saveObs} style={{
-              background:"linear-gradient(135deg,#a78bfa,#8b5cf6)", color:"#fff",
-              border:"none", padding:"5px 14px", borderRadius:5,
-              fontSize:11, fontFamily:"'Space Mono',monospace", fontWeight:700, cursor:"pointer"
-            }}>salvar obs</button>
-          </div>
-        </div>
-      )}
+function PlaceCard(props) {
+  var exp = useState(false); var expanded = exp[0]; var setExpanded = exp[1];
+  var place = props.place; var index = props.index;
+  return h("div", { className:"card-enter", style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16, display:"flex", flexDirection:"column", gap:10, animationDelay: (index*0.04)+"s", opacity:0, position:"relative", overflow:"hidden" } },
+    h("div", { style: { display:"flex", gap:12, alignItems:"flex-start" } },
+      h("div", { style: { flexShrink:0 } },
+        place.score !== null
+          ? h(ScoreRing, { score:place.score, grade:place.grade })
+          : h("div", { className: props.scoring ? "scanning" : "", onClick: function() { if (!props.scoring) props.onScore(place, index); }, style: { width:60, height:60, border:"2px dashed #2a3142", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", cursor: props.scoring ? "default" : "pointer", color:"#3d4559", fontSize:10, textAlign:"center", fontFamily:"'Space Mono',monospace", flexShrink:0 } },
+            props.scoring ? "..." : "IA Score"
+          )
+      ),
+      h("div", { style: { flex:1, minWidth:0 } },
+        h("div", { style: { fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:14, color:"#e2e8f0", marginBottom:3 } }, place.name),
+        h("div", { style: { display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", marginBottom:4 } },
+          h(Stars, { rating:place.rating }),
+          h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" } }, "("+place.reviewCount+" avaliacoes)")
+        ),
+        h("div", { style: { fontSize:12, color:"#64748b", marginBottom:2 } }, "\uD83D\uDCCD "+place.address),
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:12, color:"#38bdf8" } }, "\uD83D\uDCDE "+place.phone)
+      ),
+      h("div", { style: { display:"flex", flexDirection:"column", gap:6, flexShrink:0 } },
+        h("button", { onClick: function() { props.onAdd(place); }, disabled: props.inPipeline, style: { background: props.inPipeline ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)", color: props.inPipeline ? "#3d4559" : "#0c0f14", border:"none", padding:"6px 12px", borderRadius:5, fontSize:11, fontWeight:700, fontFamily:"'Space Mono',monospace", cursor: props.inPipeline ? "default" : "pointer", whiteSpace:"nowrap" } },
+          props.inPipeline ? "\u2713 No CRM" : "+ Pipeline"
+        ),
+        place.score !== null && h("button", { onClick: function() { setExpanded(!expanded); }, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", padding:"5px 10px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } },
+          expanded ? "\u25b2 ocultar" : "\u25bc detalhar"
+        )
+      )
+    ),
+    expanded && place.scoreExplanation && h("div", { style: { borderTop:"1px solid #1e2535", paddingTop:10, display:"flex", flexDirection:"column", gap:8 } },
+      h("div", { style: { background:"#0c0f14", borderRadius:6, padding:10, border:"1px solid #1e2535" } },
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", marginBottom:4, textTransform:"uppercase", letterSpacing:1 } }, "Analise do Score"),
+        h("div", { style: { fontSize:12, color:"#94a3b8", lineHeight:1.5 } }, place.scoreExplanation)
+      ),
+      h("div", { style: { background:"rgba(56,189,248,0.05)", borderRadius:6, padding:10, border:"1px solid rgba(56,189,248,0.15)" } },
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#38bdf8", marginBottom:4, textTransform:"uppercase", letterSpacing:1 } }, "\uD83C\uDFAF Pitch Sugerido"),
+        h("div", { style: { fontSize:12, color:"#e2e8f0", lineHeight:1.6, fontStyle:"italic" } }, '"'+place.pitch+'"')
+      )
+    )
+  );
+}
 
-      {!editingObs && prospect.obs && (
-        <div style={{ borderTop:"1px solid #1e2535", paddingTop:8 }}>
-          <div style={{ fontSize:12, color:"#94a3b8", lineHeight:1.5, background:"rgba(167,139,250,0.05)", borderRadius:5, padding:"6px 10px", border:"1px solid rgba(167,139,250,0.15)" }}>
-            <span style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#a78bfa", marginRight:6 }}>✎</span>
-            {prospect.obs}
-          </div>
-        </div>
-      )}
-    </div>
+function PipelineRow(props) {
+  var eo = useState(false); var editingObs = eo[0]; var setEditingObs = eo[1];
+  var ov = useState(props.prospect.obs || ""); var obsValue = ov[0]; var setObsValue = ov[1];
+  var p = props.prospect;
+
+  function saveObs() { props.onObsChange(p.id, obsValue); setEditingObs(false); }
+
+  return h("div", { style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:"12px 16px", display:"flex", flexDirection:"column", gap:10 } },
+    h("div", { style: { display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" } },
+      p.score !== null && h(ScoreRing, { score:p.score, grade:p.grade }),
+      h("div", { style: { flex:1, minWidth:160 } },
+        h("div", { style: { fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:13, color:"#e2e8f0" } }, p.name),
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" } }, p.city+" \u00b7 "+p.category),
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:11, color:"#38bdf8", marginTop:2 } }, p.phone)
+      ),
+      h(Stars, { rating:p.rating }),
+      h(StatusBadge, { status:p.status, onChange: function(s) { props.onStatusChange(p.id, s); }, statuses:props.statuses }),
+      h("button", { onClick: function() { setEditingObs(!editingObs); }, style: { background: p.obs ? "rgba(167,139,250,0.1)" : "transparent", border: p.obs ? "1px solid rgba(167,139,250,0.3)" : "1px solid #2a3142", color: p.obs ? "#a78bfa" : "#64748b", padding:"5px 10px", borderRadius:4, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer", whiteSpace:"nowrap" } },
+        p.obs ? "\u270e obs" : "+ obs"
+      ),
+      h("button", { onClick: function() { props.onRemove(p.id); }, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", width:28, height:28, borderRadius:4, cursor:"pointer", fontSize:14, flexShrink:0 } }, "\u00d7")
+    ),
+    editingObs && h("div", { style: { borderTop:"1px solid #1e2535", paddingTop:10, display:"flex", flexDirection:"column", gap:6 } },
+      h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", textTransform:"uppercase", letterSpacing:1 } }, "Observacoes"),
+      h("textarea", { value:obsValue, onChange: function(e) { setObsValue(e.target.value); }, placeholder:"Anote o que foi conversado, proximos passos...", rows:3, style: { width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:12, resize:"vertical", fontFamily:"'DM Sans',sans-serif", lineHeight:1.5 } }),
+      h("div", { style: { display:"flex", gap:8, justifyContent:"flex-end" } },
+        h("button", { onClick: function() { setObsValue(p.obs||""); setEditingObs(false); }, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", padding:"5px 12px", borderRadius:5, fontSize:11, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "cancelar"),
+        h("button", { onClick:saveObs, style: { background:"linear-gradient(135deg,#a78bfa,#8b5cf6)", color:"#fff", border:"none", padding:"5px 14px", borderRadius:5, fontSize:11, fontFamily:"'Space Mono',monospace", fontWeight:700, cursor:"pointer" } }, "salvar obs")
+      )
+    ),
+    !editingObs && p.obs && h("div", { style: { borderTop:"1px solid #1e2535", paddingTop:8 } },
+      h("div", { style: { fontSize:12, color:"#94a3b8", lineHeight:1.5, background:"rgba(167,139,250,0.05)", borderRadius:5, padding:"6px 10px", border:"1px solid rgba(167,139,250,0.15)" } },
+        h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#a78bfa", marginRight:6 } }, "\u270e"),
+        p.obs
+      )
+    )
   );
 }
 
 function App() {
-  const [unlocked, setUnlocked] = useState(false);
-  const [tab, setTab] = useState("search");
-  const [statuses, setStatuses] = useState(DEFAULT_STATUSES);
-  const [showStatusMgr, setShowStatusMgr] = useState(false);
-  const [geminiKey] = useState("AIzaSyDFp-3hiwGxzYKjzFY3QpIKlNkgQ8-xP00");
-  const [googleKey] = useState("AIzaSyC6THiLbBkFrVCT-tcG0gFHkXV3vVHVjx0");
-  const [city, setCity] = useState("Botucatu");
-  const [category, setCategory] = useState("");
-  const [minReviews, setMinReviews] = useState(30);
-  const [results, setResults] = useState([]);
-  const [pipeline, setPipeline] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [loadingPage, setLoadingPage] = useState(0);
-  const [scoringId, setScoringId] = useState(null);
+  var u = useState(false); var unlocked = u[0]; var setUnlocked = u[1];
+  var t = useState("search"); var tab = t[0]; var setTab = t[1];
+  var st = useState(DEFAULT_STATUSES); var statuses = st[0]; var setStatuses = st[1];
+  var sm = useState(false); var showStatusMgr = sm[0]; var setShowStatusMgr = sm[1];
+  var ci = useState("Lencois Paulista"); var city = ci[0]; var setCity = ci[1];
+  var ca = useState(""); var category = ca[0]; var setCategory = ca[1];
+  var mr = useState(30); var minReviews = mr[0]; var setMinReviews = mr[1];
+  var re = useState([]); var results = re[0]; var setResults = re[1];
+  var pi = useState([]); var pipeline = pi[0]; var setPipeline = pi[1];
+  var lo = useState(false); var loading = lo[0]; var setLoading = lo[1];
+  var lp = useState(0); var loadingPage = lp[0]; var setLoadingPage = lp[1];
+  var sc = useState(null); var scoringId = sc[0]; var setScoringId = sc[1];
+  var er = useState(""); var error = er[0]; var setError = er[1];
 
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    try { const p = storage.get("pipeline_v1"); if (p) setPipeline(JSON.parse(p.value)); } catch {}
-    try { const s = storage.get("statuses_v1"); if (s) setStatuses(JSON.parse(s.value)); } catch {}
-
+  useEffect(function() {
+    var p = lsGet("pipeline_v1"); if (p) setPipeline(p);
+    var s = lsGet("statuses_v1"); if (s) setStatuses(s);
   }, []);
 
-  if (!unlocked) return <PasswordScreen onUnlock={() => setUnlocked(true)} />;
+  if (!unlocked) return h(PasswordScreen, { onUnlock: function() { setUnlocked(true); } });
 
-
-
-  function savePipeline(data) {
-    try { storage.set("pipeline_v1", JSON.stringify(data)); } catch {}
-  }
+  function savePipeline(data) { lsSet("pipeline_v1", data); }
 
   function handleSaveStatuses(newStatuses) {
     setStatuses(newStatuses);
-    storage.set("statuses_v1", JSON.stringify(newStatuses));
+    lsSet("statuses_v1", newStatuses);
     setShowStatusMgr(false);
   }
 
-  async function doSearch() {
-    if (!googleKey || !category.trim() || !city.trim()) {
-      setError("Preencha cidade, categoria e configure as chaves na aba Config.");
-      return;
-    }
+  function doSearch() {
+    if (!category.trim() || !city.trim()) { setError("Preencha cidade e categoria."); return; }
     setError(""); setLoading(true); setLoadingPage(0); setResults([]);
 
-    const HEADERS = {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": googleKey,
-      "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.regularOpeningHours,nextPageToken"
-    };
+    var HEADERS = { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,nextPageToken" };
+    var allPlaces = [];
+    var pageToken = null;
+    var page = 0;
+    var catSnap = category; var citySnap = city; var minSnap = minReviews;
 
     function mapPlace(p) {
-      return {
-        id: p.id,
-        name: p.displayName?.text || "Sem nome",
-        address: p.formattedAddress || "",
-        phone: p.nationalPhoneNumber || "N/D",
-        rating: p.rating || 0,
-        reviewCount: p.userRatingCount || 0,
-        weekdayText: p.regularOpeningHours?.weekdayDescriptions || [],
-        category, city,
-        score: null, grade: null, scoreExplanation: null, pitch: null
-      };
+      return { id:p.id, name:(p.displayName&&p.displayName.text)||"Sem nome", address:p.formattedAddress||"", phone:p.nationalPhoneNumber||"N/D", rating:p.rating||0, reviewCount:p.userRatingCount||0, category:catSnap, city:citySnap, score:null, grade:null, scoreExplanation:null, pitch:null };
     }
 
-    try {
-      let allPlaces = [];
-      let pageToken = null;
-      let page = 0;
-
-      do {
-        const body = { textQuery: `${category} em ${city}`, languageCode: "pt-BR", maxResultCount: 20 };
-        if (pageToken) body.pageToken = pageToken;
-
-        const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-          method: "POST", headers: HEADERS, body: JSON.stringify(body)
-        });
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error?.message || `HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        const batch = (data.places || []).map(mapPlace);
-        allPlaces = [...allPlaces, ...batch];
-        pageToken = data.nextPageToken || null;
-        page++;
-        setLoadingPage(page);
-
-        const filtered = allPlaces.filter(p => p.reviewCount >= minReviews);
-        setResults([...filtered]);
-
-        if (pageToken && page < 5) await new Promise(r => setTimeout(r, 800));
-
-      } while (pageToken && page < 5);
-
-      const filtered = allPlaces.filter(p => p.reviewCount >= minReviews);
-      setResults(filtered);
-      if (filtered.length === 0) setError(`Nenhum resultado com ${minReviews}+ avaliações. Tente diminuir o filtro.`);
-    } catch (e) { setError("Erro: " + e.message); }
-    setLoading(false);
-    setLoadingPage(0);
-  }
-
-  async function scorePlace(place, index) {
-    if (!geminiKey) { setError("Configure a chave Gemini na aba Config!"); return; }
-    setScoringId(place.id);
-    setError("");
-
-const prompt = `Você é um consultor de prospecção B2B altamente criterioso. Avalie com RIGOR este prospect para serviços de marketing digital.
-
-DADOS DO PROSPECT:
-- Nome: ${place.name}
-- Categoria: ${place.category}
-- Cidade: ${place.city}
-- Avaliação Google: ${place.rating}/5
-- Número de avaliações: ${place.reviewCount}
-- Telefone disponível: ${place.phone !== "N/D" ? "Sim" : "Não"}
-
-CRITÉRIOS DE PONTUAÇÃO (seja rigoroso e varie o score):
-- Avaliação < 3.5 → penalize fortemente (-15 a -25 pts)
-- Avaliação 3.5-4.0 → neutro
-- Avaliação > 4.5 → bônus (+10 pts)
-- Menos de 30 avaliações → sinal de negócio pequeno (-15 pts)
-- 50-200 avaliações → médio porte (neutro)
-- 200+ avaliações → negócio estabelecido (+15 pts)
-- Sem telefone → penalize (-10 pts)
-- Categorias como clínica, academia, restaurante premium → maior potencial (+10 pts)
-
-Use toda a escala de 0 a 100. NÃO retorne sempre 85. Varie conforme os dados reais.
-
-Responda SOMENTE com JSON puro, sem markdown:
-{"score":XX,"grade":"X","explanation":"2 frases sobre pontos fortes e fracos reais.","pitch":"2 frases de pitch personalizado."}
-
-Grades: A=80-100, B=60-79, C=40-59, D=0-39`;
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.4, maxOutputTokens: 500 }
-          })
-        }
-      );
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error?.message || `HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      const clean = raw.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      setResults(prev => prev.map((p, i) => i === index
-        ? { ...p, score: parsed.score, grade: parsed.grade, scoreExplanation: parsed.explanation, pitch: parsed.pitch }
-        : p
-      ));
-    } catch (e) { setError("Erro no scoring: " + e.message); }
-    setScoringId(null);
-  }
-
-  async function scoreAll() {
-    for (let i = 0; i < results.length; i++) {
-      if (results[i].score === null) await scorePlace(results[i], i);
+    function fetchPage() {
+      var body = { textQuery: catSnap+" em "+citySnap, languageCode:"pt-BR", maxResultCount:20 };
+      if (pageToken) body.pageToken = pageToken;
+      fetch("https://places.googleapis.com/v1/places:searchText", { method:"POST", headers:HEADERS, body:JSON.stringify(body) })
+        .then(function(res) { return res.json().then(function(d) { return { ok:res.ok, d:d }; }); })
+        .then(function(rd) {
+          if (!rd.ok) throw new Error((rd.d.error&&rd.d.error.message)||"Erro API");
+          allPlaces = allPlaces.concat((rd.d.places||[]).map(mapPlace));
+          pageToken = rd.d.nextPageToken || null;
+          page++;
+          setLoadingPage(page);
+          setResults(allPlaces.filter(function(p) { return p.reviewCount >= minSnap; }));
+          if (pageToken && page < 5) {
+            setTimeout(fetchPage, 800);
+          } else {
+            var filtered = allPlaces.filter(function(p) { return p.reviewCount >= minSnap; });
+            setResults(filtered);
+            if (filtered.length === 0) setError("Nenhum resultado com "+minSnap+"+ avaliacoes.");
+            setLoading(false); setLoadingPage(0);
+          }
+        })
+        .catch(function(e) { setError("Erro: "+e.message); setLoading(false); setLoadingPage(0); });
     }
+    fetchPage();
+  }
+
+  function scorePlace(place, index) {
+    setScoringId(place.id); setError("");
+    var prompt = "Avalie este prospect para servicos de marketing digital.\n\nNome: "+place.name+"\nCategoria: "+place.category+"\nCidade: "+place.city+"\nAvaliacao Google: "+place.rating+"/5\nNumero de avaliacoes: "+place.reviewCount+"\nTelefone: "+(place.phone!=="N/D"?"Sim":"Nao")+"\n\nCriterios: avaliacao < 3.5 penalize, > 4.5 bonus, 200+ avaliacoes bonus, sem telefone penalize. Use escala 0-100. Responda SOMENTE JSON puro sem markdown: {\"score\":XX,\"grade\":\"X\",\"explanation\":\"2 frases.\",\"pitch\":\"2 frases de pitch.\"}\nGrades: A=80-100, B=60-79, C=40-59, D=0-39";
+    fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+GEMINI_KEY, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.4, maxOutputTokens:500} })
+    })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      var raw = (data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||"{}";
+      var clean = raw.replace(/```json|```/g, "").trim();
+      var parsed = JSON.parse(clean);
+      setResults(function(prev) { return prev.map(function(p, i) { return i===index ? Object.assign({}, p, {score:parsed.score, grade:parsed.grade, scoreExplanation:parsed.explanation, pitch:parsed.pitch}) : p; }); });
+      setScoringId(null);
+    })
+    .catch(function(e) { setError("Erro no scoring: "+e.message); setScoringId(null); });
+  }
+
+  function scoreAll() {
+    var i = 0;
+    function next() {
+      while (i < results.length && results[i].score !== null) i++;
+      if (i < results.length) { scorePlace(results[i], i); i++; setTimeout(next, 1500); }
+    }
+    next();
   }
 
   function addToPipeline(place) {
-    if (pipeline.find(p => p.id === place.id)) return;
-    const updated = [...pipeline, { ...place, status: "none", obs: "", addedAt: new Date().toISOString() }];
+    if (pipeline.find(function(p) { return p.id===place.id; })) return;
+    var updated = pipeline.concat(Object.assign({}, place, {status:"none", obs:"", addedAt:new Date().toISOString()}));
     setPipeline(updated); savePipeline(updated);
   }
 
   function updateStatus(id, status) {
-    const updated = pipeline.map(p => p.id === id ? { ...p, status } : p);
+    var updated = pipeline.map(function(p) { return p.id===id ? Object.assign({}, p, {status:status}) : p; });
     setPipeline(updated); savePipeline(updated);
   }
 
   function updateObs(id, obs) {
-    const updated = pipeline.map(p => p.id === id ? { ...p, obs } : p);
+    var updated = pipeline.map(function(p) { return p.id===id ? Object.assign({}, p, {obs:obs}) : p; });
     setPipeline(updated); savePipeline(updated);
   }
 
   function removeFromPipeline(id) {
-    const updated = pipeline.filter(p => p.id !== id);
+    var updated = pipeline.filter(function(p) { return p.id!==id; });
     setPipeline(updated); savePipeline(updated);
   }
 
   function exportExcel() {
-    const XLSX = window.XLSX;
-    const rows = pipeline.map(p => ({
-      Nome: p.name, Categoria: p.category, Cidade: p.city,
-      Telefone: p.phone, "Endereço": p.address,
-      "Avaliação": p.rating, "Nº Avaliações": p.reviewCount,
-      Score: p.score || "", Grade: p.grade || "",
-      "Análise IA": p.scoreExplanation || "",
-      "Pitch Sugerido": p.pitch || "",
-      Status: statuses.find(s => s.id === p.status)?.label || "",
-      Observações: p.obs || "",
-      "Adicionado em": new Date(p.addedAt).toLocaleDateString("pt-BR"),
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    ws["!cols"] = [20,15,12,14,30,8,12,6,6,40,50,18,40,12].map(w => ({ wch: w }));
-    const wb = XLSX.utils.book_new();
+    var XLSX = window.XLSX;
+    var rows = pipeline.map(function(p) {
+      var found = statuses.find(function(s) { return s.id===p.status; });
+      return { Nome:p.name, Categoria:p.category, Cidade:p.city, Telefone:p.phone, Endereco:p.address, Avaliacao:p.rating, Avaliacoes:p.reviewCount, Score:p.score||"", Grade:p.grade||"", Analise:p.scoreExplanation||"", Pitch:p.pitch||"", Status:(found&&found.label)||"", Observacoes:p.obs||"", Adicionado:new Date(p.addedAt).toLocaleDateString("pt-BR") };
+    });
+    var ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [20,15,12,14,30,8,12,6,6,40,50,18,40,12].map(function(w) { return {wch:w}; });
+    var wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Prospects");
-    XLSX.writeFile(wb, `prospects_${new Date().toLocaleDateString("pt-BR").replace(/\//g,"_")}.xlsx`);
+    XLSX.writeFile(wb, "prospects_"+new Date().toLocaleDateString("pt-BR").replace(/\//g,"_")+".xlsx");
   }
 
-  const pipelineByStatus = statuses.reduce((acc, s) => { acc[s.id] = pipeline.filter(p => p.status === s.id).length; return acc; }, {});
+  var pipelineByStatus = {};
+  statuses.forEach(function(s) { pipelineByStatus[s.id] = pipeline.filter(function(p) { return p.status===s.id; }).length; });
 
-  return (
-    <div style={{ minHeight:"100vh", background:"#0c0f14", fontFamily:"'DM Sans',sans-serif", color:"#e2e8f0", paddingBottom:60 }}>
-      <div style={{ background:"linear-gradient(180deg,#0f131a,#0c0f14)", borderBottom:"1px solid #1e2535", padding:"16px 24px", display:"flex", alignItems:"center", gap:16 }}>
-        <div>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:15, color:"#38bdf8", letterSpacing:2 }}>
-            PROSPECT<span style={{ color:"#4ade80" }}>IQ</span>
-          </div>
-          <div style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#3d4559", letterSpacing:3, textTransform:"uppercase" }}>sistema de prospecção b2b</div>
-        </div>
-        <div style={{ flex:1 }} />
-        {["search","pipeline"].map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            background: tab===t ? "rgba(56,189,248,0.1)" : "transparent",
-            border: tab===t ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent",
-            color: tab===t ? "#38bdf8" : "#64748b",
-            padding:"6px 14px", borderRadius:6, cursor:"pointer",
-            fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase"
-          }}>
-            {t==="search" ? "🔍 Busca" : `📋 Pipeline${pipeline.length>0?` (${pipeline.length})`:""}`}
-          </button>
-        ))}
-      </div>
+  var orderedPipeline = statuses.reduce(function(arr, s) {
+    return arr.concat(pipeline.filter(function(p) { return p.status===s.id; }));
+  }, []);
 
-      <div style={{ maxWidth:900, margin:"0 auto", padding:"24px 16px" }}>
+  return h("div", { style: { minHeight:"100vh", background:"#0c0f14", fontFamily:"'DM Sans',sans-serif", color:"#e2e8f0", paddingBottom:60 } },
 
-        {tab === "config" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:16, maxWidth:520, margin:"0 auto" }}>
-            <div style={{ fontFamily:"'Space Mono',monospace", fontSize:11, color:"#64748b", letterSpacing:2, textTransform:"uppercase" }}>Configuração de chaves de API</div>
-            <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:20, display:"flex", flexDirection:"column", gap:14 }}>
-              {[
-                { label:"Chave Google (Places API New)", hint:"AIza...", val:googleKey, set:setGoogleKey, note:'Ative "Places API (New)" no Google Cloud Console' },
-                { label:"Chave Gemini API (Score IA — Grátis)", hint:"AIza...", val:geminiKey, set:setGeminiKey, note:"Grátis em aistudio.google.com/apikey" },
-              ].map(f => (
-                <div key={f.label}>
-                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b", display:"block", marginBottom:6, textTransform:"uppercase", letterSpacing:1 }}>{f.label}</label>
-                  <input type="password" value={f.val} onChange={e => f.set(e.target.value)} placeholder={f.hint} style={{
-                    width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6,
-                    padding:"9px 12px", color:"#e2e8f0", fontFamily:"'Space Mono',monospace", fontSize:12
-                  }} />
-                  <div style={{ fontSize:11, color:"#3d4559", marginTop:4 }}>{f.note}</div>
-                </div>
-              ))}
-              <button onClick={saveKeys} style={{
-                background: keySaved ? "linear-gradient(135deg,#4ade80,#22c55e)" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-                color:"#0c0f14", border:"none", borderRadius:7, padding:"10px 20px",
-                fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:12, cursor:"pointer", letterSpacing:1
-              }}>{keySaved ? "✓ SALVO!" : "SALVAR E CONTINUAR →"}</button>
-            </div>
-            <div style={{ background:"rgba(74,222,128,0.05)", border:"1px solid rgba(74,222,128,0.2)", borderRadius:8, padding:14 }}>
-              <div style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#4ade80", marginBottom:8 }}>✦ COMO OBTER AS CHAVES</div>
-              <div style={{ fontSize:12, color:"#94a3b8", lineHeight:2 }}>
-                <strong style={{color:"#e2e8f0"}}>1. Google Places</strong> → console.cloud.google.com → APIs → Places API (New)<br/>
-                <strong style={{color:"#e2e8f0"}}>2. Gemini (grátis)</strong> → aistudio.google.com/apikey → Create API Key
-              </div>
-            </div>
-          </div>
-        )}
+    // HEADER
+    h("div", { style: { background:"linear-gradient(180deg,#0f131a,#0c0f14)", borderBottom:"1px solid #1e2535", padding:"16px 24px", display:"flex", alignItems:"center", gap:16 } },
+      h("div", null,
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:15, color:"#38bdf8", letterSpacing:2 } },
+          "PROSPECT", h("span", { style: {color:"#4ade80"} }, "IQ")
+        ),
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#3d4559", letterSpacing:3, textTransform:"uppercase" } }, "sistema de prospeccao b2b")
+      ),
+      h("div", { style: {flex:1} }),
+      h("button", { onClick: function() { setTab("search"); }, style: { background: tab==="search" ? "rgba(56,189,248,0.1)" : "transparent", border: tab==="search" ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent", color: tab==="search" ? "#38bdf8" : "#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase" } }, "\uD83D\uDD0D Busca"),
+      h("button", { onClick: function() { setTab("pipeline"); }, style: { background: tab==="pipeline" ? "rgba(56,189,248,0.1)" : "transparent", border: tab==="pipeline" ? "1px solid rgba(56,189,248,0.3)" : "1px solid transparent", color: tab==="pipeline" ? "#38bdf8" : "#64748b", padding:"6px 14px", borderRadius:6, cursor:"pointer", fontFamily:"'Space Mono',monospace", fontSize:10, letterSpacing:1, textTransform:"uppercase" } }, "\uD83D\uDCCB Pipeline"+(pipeline.length>0 ? " ("+pipeline.length+")" : ""))
+    ),
 
-        {tab === "search" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-            <div style={{ background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:16 }}>
-              <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end" }}>
-                <div style={{ flex:"1 1 130px" }}>
-                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Cidade</label>
-                  <input value={city} onChange={e => setCity(e.target.value)} onKeyDown={e => e.key==="Enter" && doSearch()} style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 }} />
-                </div>
-                <div style={{ flex:"2 1 180px" }}>
-                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Categoria / Segmento</label>
-                  <input value={category} onChange={e => setCategory(e.target.value)} onKeyDown={e => e.key==="Enter" && doSearch()} placeholder="ex: pizzaria, clínica, academia..." style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 }} />
-                </div>
-                <div style={{ flex:"0 1 120px" }}>
-                  <label style={{ fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 }}>Mín. avaliações</label>
-                  <input type="number" value={minReviews} onChange={e => setMinReviews(+e.target.value)} style={{ width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontFamily:"'Space Mono',monospace", fontSize:13 }} />
-                </div>
-                <button onClick={doSearch} disabled={loading} style={{
-                  background: loading ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)",
-                  color: loading ? "#3d4559" : "#0c0f14", border:"none", borderRadius:7,
-                  padding:"9px 20px", fontFamily:"'Space Mono',monospace", fontWeight:700,
-                  fontSize:12, cursor: loading ? "default" : "pointer", letterSpacing:1, whiteSpace:"nowrap"
-                }}>{loading ? `BUSCANDO... ${loadingPage > 0 ? `(pág ${loadingPage}/5)` : ""}` : "BUSCAR →"}</button>
-              </div>
-            </div>
+    // CONTENT
+    h("div", { style: { maxWidth:900, margin:"0 auto", padding:"24px 16px" } },
 
-            {error && <div style={{ background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)", borderRadius:7, padding:"10px 14px", color:"#f87171", fontSize:12 }}>{error}</div>}
+      // SEARCH TAB
+      tab === "search" && h("div", { style: { display:"flex", flexDirection:"column", gap:16 } },
+        h("div", { style: { background:"#131720", border:"1px solid #1e2535", borderRadius:10, padding:16 } },
+          h("div", { style: { display:"flex", gap:10, flexWrap:"wrap", alignItems:"flex-end" } },
+            h("div", { style: { flex:"1 1 130px" } },
+              h("label", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 } }, "Cidade"),
+              h("input", { value:city, onChange: function(e) { setCity(e.target.value); }, onKeyDown: function(e) { if (e.key==="Enter") doSearch(); }, style: { width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 } })
+            ),
+            h("div", { style: { flex:"2 1 180px" } },
+              h("label", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 } }, "Categoria"),
+              h("input", { value:category, onChange: function(e) { setCategory(e.target.value); }, onKeyDown: function(e) { if (e.key==="Enter") doSearch(); }, placeholder:"ex: pizzaria, hamburgueria...", style: { width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontSize:13 } })
+            ),
+            h("div", { style: { flex:"0 1 120px" } },
+              h("label", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", display:"block", marginBottom:5, textTransform:"uppercase", letterSpacing:1 } }, "Min. avaliacoes"),
+              h("input", { type:"number", value:minReviews, onChange: function(e) { setMinReviews(+e.target.value); }, style: { width:"100%", background:"#0c0f14", border:"1px solid #2a3142", borderRadius:6, padding:"8px 10px", color:"#e2e8f0", fontFamily:"'Space Mono',monospace", fontSize:13 } })
+            ),
+            h("button", { onClick:doSearch, disabled:loading, style: { background: loading ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)", color: loading ? "#3d4559" : "#0c0f14", border:"none", borderRadius:7, padding:"9px 20px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:12, cursor: loading ? "default" : "pointer", letterSpacing:1, whiteSpace:"nowrap" } },
+              loading ? ("BUSCANDO... "+(loadingPage>0?"(pag "+loadingPage+"/5)":"")) : "BUSCAR \u2192"
+            )
+          )
+        ),
 
-            {results.length > 0 && (
-              <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                <span style={{ fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" }}>{results.length} resultados</span>
-                <div style={{ flex:1 }} />
-                <button onClick={scoreAll} disabled={!!scoringId} style={{ background:"rgba(74,222,128,0.1)", border:"1px solid rgba(74,222,128,0.25)", color:"#4ade80", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" }}>⚡ Score IA em todos</button>
-                <button onClick={() => results.forEach(p => addToPipeline(p))} style={{ background:"rgba(56,189,248,0.1)", border:"1px solid rgba(56,189,248,0.25)", color:"#38bdf8", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" }}>+ Todos no pipeline</button>
-              </div>
-            )}
+        error && h("div", { style: { background:"rgba(248,113,113,0.08)", border:"1px solid rgba(248,113,113,0.25)", borderRadius:7, padding:"10px 14px", color:"#f87171", fontSize:12 } }, error),
 
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {results.map((place, i) => (
-                <PlaceCard key={place.id} place={place} index={i}
-                  onScore={scorePlace} onAdd={addToPipeline}
-                  scoring={scoringId === place.id}
-                  inPipeline={!!pipeline.find(p => p.id === place.id)} />
-              ))}
-            </div>
-          </div>
-        )}
+        results.length > 0 && h("div", { style: { display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" } },
+          h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" } }, results.length+" resultados"),
+          h("div", { style: {flex:1} }),
+          h("button", { onClick:scoreAll, disabled:!!scoringId, style: { background:"rgba(74,222,128,0.1)", border:"1px solid rgba(74,222,128,0.25)", color:"#4ade80", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "\u26a1 Score IA em todos"),
+          h("button", { onClick: function() { results.forEach(function(p) { addToPipeline(p); }); }, style: { background:"rgba(56,189,248,0.1)", border:"1px solid rgba(56,189,248,0.25)", color:"#38bdf8", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "+ Todos no pipeline")
+        ),
 
-        {tab === "pipeline" && (
-          <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
-            <div style={{ display:"flex", justifyContent:"flex-end" }}>
-              <button onClick={() => setShowStatusMgr(true)} style={{ background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.3)", color:"#a78bfa", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" }}>⚙ gerenciar status</button>
-            </div>
-            <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-              {statuses.map(s => (
-                <div key={s.id} style={{ background:s.bg, border:`1px solid ${s.color}30`, borderRadius:8, padding:"10px 16px", flex:"1 1 100px" }}>
-                  <div style={{ fontFamily:"'Space Mono',monospace", fontSize:20, fontWeight:700, color:s.color }}>{pipelineByStatus[s.id]}</div>
-                  <div style={{ fontSize:11, color:"#94a3b8", marginTop:2 }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
+        h("div", { style: { display:"flex", flexDirection:"column", gap:10 } },
+          results.map(function(place, i) {
+            return h(PlaceCard, { key:place.id, place:place, index:i, onScore:scorePlace, onAdd:addToPipeline, scoring:scoringId===place.id, inPipeline:!!pipeline.find(function(p) { return p.id===place.id; }) });
+          })
+        )
+      ),
 
-            {pipeline.length > 0 ? (
-              <>
-                <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                  <button onClick={exportExcel} style={{ background:"linear-gradient(135deg,#4ade80,#22c55e)", color:"#0c0f14", border:"none", borderRadius:7, padding:"8px 18px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:11, cursor:"pointer", letterSpacing:1 }}>↓ EXPORTAR EXCEL</button>
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                  {statuses.flatMap(s => pipeline.filter(p => p.status === s.id)).map(p => (
-                    <PipelineRow key={p.id} prospect={p} onStatusChange={updateStatus} onRemove={removeFromPipeline} onObsChange={updateObs} statuses={statuses} />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div style={{ textAlign:"center", padding:"60px 20px", color:"#3d4559", fontFamily:"'Space Mono',monospace", fontSize:12 }}>
-                Pipeline vazio.<br/><span style={{ color:"#64748b" }}>Adicione prospects na aba Busca.</span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </div>
-    {showStatusMgr && <StatusManager statuses={statuses} onSave={handleSaveStatuses} onClose={() => setShowStatusMgr(false)} />}
+      // PIPELINE TAB
+      tab === "pipeline" && h("div", { style: { display:"flex", flexDirection:"column", gap:16 } },
+        h("div", { style: { display:"flex", justifyContent:"flex-end" } },
+          h("button", { onClick: function() { setShowStatusMgr(true); }, style: { background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.3)", color:"#a78bfa", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "\u2699 gerenciar status")
+        ),
+        h("div", { style: { display:"flex", gap:10, flexWrap:"wrap" } },
+          statuses.map(function(s) {
+            return h("div", { key:s.id, style: { background:s.bg, border:"1px solid "+s.color+"30", borderRadius:8, padding:"10px 16px", flex:"1 1 100px" } },
+              h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:20, fontWeight:700, color:s.color } }, pipelineByStatus[s.id]||0),
+              h("div", { style: { fontSize:11, color:"#94a3b8", marginTop:2 } }, s.label)
+            );
+          })
+        ),
+        pipeline.length > 0
+          ? h(React.Fragment, null,
+              h("div", { style: { display:"flex", justifyContent:"flex-end" } },
+                h("button", { onClick:exportExcel, style: { background:"linear-gradient(135deg,#4ade80,#22c55e)", color:"#0c0f14", border:"none", borderRadius:7, padding:"8px 18px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:11, cursor:"pointer", letterSpacing:1 } }, "\u2193 EXPORTAR EXCEL")
+              ),
+              h("div", { style: { display:"flex", flexDirection:"column", gap:8 } },
+                orderedPipeline.map(function(p) {
+                  return h(PipelineRow, { key:p.id, prospect:p, onStatusChange:updateStatus, onRemove:removeFromPipeline, onObsChange:updateObs, statuses:statuses });
+                })
+              )
+            )
+          : h("div", { style: { textAlign:"center", padding:"60px 20px", color:"#3d4559", fontFamily:"'Space Mono',monospace", fontSize:12 } },
+              "Pipeline vazio.", h("br"), h("span", { style: {color:"#64748b"} }, "Adicione prospects na aba Busca.")
+            )
+      )
+    ),
+
+    showStatusMgr && h(StatusManager, { statuses:statuses, onSave:handleSaveStatuses, onClose: function() { setShowStatusMgr(false); } })
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
 </script>
 </body>
 </html>
