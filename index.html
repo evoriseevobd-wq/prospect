@@ -292,7 +292,8 @@ function PipelineRow(props) {
       h("div", { style: { flex:1, minWidth:160 } },
         h("div", { style: { fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:13, color:"#e2e8f0" } }, p.name),
         h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" } }, p.city+" \u00b7 "+p.category),
-        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:11, color:"#38bdf8", marginTop:2 } }, p.phone)
+        h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:11, color:"#38bdf8", marginTop:2 } }, p.phone),
+        p.weekdayText && p.weekdayText.length > 0 && h(HoursDisplay, { weekdayText: p.weekdayText })
       ),
       h(Stars, { rating:p.rating }),
       h(StatusBadge, { status:p.status, onChange: function(s) { props.onStatusChange(p.id, s); }, statuses:props.statuses }),
@@ -479,6 +480,26 @@ function App() {
 
   function savePipeline(data) { lsSet("pipeline_v1", data); }
 
+  function fetchHoursForPipeline() {
+    var toUpdate = pipeline.filter(function(p) { return !p.weekdayText || p.weekdayText.length === 0; });
+    if (toUpdate.length === 0) { alert("Todos os leads ja tem horario!"); return; }
+    var HEADERS = { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.regularOpeningHours,places.currentOpeningHours" };
+    var updated = pipeline.slice();
+    var done = 0;
+    toUpdate.forEach(function(p) {
+      fetch("https://places.googleapis.com/v1/places/"+p.id, { method:"GET", headers:HEADERS })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          var hours = (data.regularOpeningHours&&data.regularOpeningHours.weekdayDescriptions)||[];
+          var isOpen = data.currentOpeningHours&&data.currentOpeningHours.openNow;
+          updated = updated.map(function(u) { return u.id===p.id ? Object.assign({},u,{weekdayText:hours,isOpen:isOpen}) : u; });
+          done++;
+          if (done === toUpdate.length) { setPipeline(updated); savePipeline(updated); }
+        })
+        .catch(function() { done++; if (done === toUpdate.length) { setPipeline(updated); savePipeline(updated); } });
+    });
+  }
+
   function handleSaveStatuses(newStatuses) {
     setStatuses(newStatuses);
     lsSet("statuses_v1", newStatuses);
@@ -657,7 +678,8 @@ function App() {
       // PIPELINE TAB
       tab === "pipeline" && h("div", { style: { display:"flex", flexDirection:"column", gap:16 } },
         h("div", { style: { display:"flex", justifyContent:"flex-end" } },
-          h("button", { onClick: function() { setShowStatusMgr(true); }, style: { background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.3)", color:"#a78bfa", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "\u2699 gerenciar status")
+          h("button", { onClick: function() { setShowStatusMgr(true); }, style: { background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.3)", color:"#a78bfa", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "\u2699 gerenciar status"),
+          h("button", { onClick: fetchHoursForPipeline, style: { background:"rgba(56,189,248,0.1)", border:"1px solid rgba(56,189,248,0.3)", color:"#38bdf8", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "\u23F0 atualizar horarios")
         ),
         filterStatus !== null && h("div", { style: { display:"flex", justifyContent:"center", marginBottom:-8 } },
           h("button", { onClick: function() { setFilterStatus(null); }, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", padding:"4px 12px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "× ver todos")
