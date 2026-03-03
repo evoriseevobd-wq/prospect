@@ -29,8 +29,8 @@ textarea::placeholder { color: #3d4559; }
 <body>
 <div id="root"></div>
 <script>
-const GOOGLE_KEY = "AIzaSyBkg6j1GgGDPni5kz2U73BRFTaO5Y3-YX4";
-const GEMINI_KEY = "AIzaSyDbZh5VKIlIdwnWhIAyvT73FTTfnt2ECcQ";
+const GOOGLE_KEY = "AIzaSyC6THiLbBkFrVCT-tcG0gFHkXV3vVHVjx0";
+const GEMINI_KEY = "AIzaSyDFp-3hiwGxzYKjzFY3QpIKlNkgQ8-xP00";
 const CORRECT_PASSWORD = "1235";
 
 const DEFAULT_STATUSES = [
@@ -299,6 +299,7 @@ function App() {
   var lp = useState(0); var loadingPage = lp[0]; var setLoadingPage = lp[1];
   var sc = useState(null); var scoringId = sc[0]; var setScoringId = sc[1];
   var er = useState(""); var error = er[0]; var setError = er[1];
+  var fs = useState(null); var filterStatus = fs[0]; var setFilterStatus = fs[1];
 
   useEffect(function() {
     var p = lsGet("pipeline_v1"); if (p) setPipeline(p);
@@ -423,6 +424,10 @@ function App() {
     return arr.concat(pipeline.filter(function(p) { return p.status===s.id; }));
   }, []);
 
+  var filteredPipeline = filterStatus !== null
+    ? orderedPipeline.filter(function(p) { return p.status === filterStatus; })
+    : orderedPipeline;
+
   return h("div", { style: { minHeight:"100vh", background:"#0c0f14", fontFamily:"'DM Sans',sans-serif", color:"#e2e8f0", paddingBottom:60 } },
 
     // HEADER
@@ -484,21 +489,26 @@ function App() {
         h("div", { style: { display:"flex", justifyContent:"flex-end" } },
           h("button", { onClick: function() { setShowStatusMgr(true); }, style: { background:"rgba(167,139,250,0.1)", border:"1px solid rgba(167,139,250,0.3)", color:"#a78bfa", padding:"5px 14px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "\u2699 gerenciar status")
         ),
+        filterStatus !== null && h("div", { style: { display:"flex", justifyContent:"center", marginBottom:-8 } },
+          h("button", { onClick: function() { setFilterStatus(null); }, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", padding:"4px 12px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } }, "× ver todos")
+        ),
         h("div", { style: { display:"flex", gap:10, flexWrap:"wrap" } },
           statuses.map(function(s) {
-            return h("div", { key:s.id, style: { background:s.bg, border:"1px solid "+s.color+"30", borderRadius:8, padding:"10px 16px", flex:"1 1 100px" } },
+            var isActive = filterStatus === s.id;
+            return h("div", { key:s.id, onClick: function() { setFilterStatus(filterStatus === s.id ? null : s.id); }, style: { background: isActive ? s.color+"25" : s.bg, border:"2px solid "+(isActive ? s.color : s.color+"30"), borderRadius:8, padding:"10px 16px", flex:"1 1 100px", cursor:"pointer", transition:"all 0.15s ease", transform: isActive ? "scale(1.03)" : "scale(1)" } },
               h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:20, fontWeight:700, color:s.color } }, pipelineByStatus[s.id]||0),
-              h("div", { style: { fontSize:11, color:"#94a3b8", marginTop:2 } }, s.label)
+              h("div", { style: { fontSize:11, color: isActive ? s.color : "#94a3b8", marginTop:2, fontWeight: isActive ? 600 : 400 } }, s.label)
             );
           })
         ),
         pipeline.length > 0
           ? h(React.Fragment, null,
-              h("div", { style: { display:"flex", justifyContent:"flex-end" } },
+              h("div", { style: { display:"flex", justifyContent:"flex-end", alignItems:"center", gap:10 } },
+                filterStatus !== null && h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" } }, filteredPipeline.length+" de "+pipeline.length+" prospects"),
                 h("button", { onClick:exportExcel, style: { background:"linear-gradient(135deg,#4ade80,#22c55e)", color:"#0c0f14", border:"none", borderRadius:7, padding:"8px 18px", fontFamily:"'Space Mono',monospace", fontWeight:700, fontSize:11, cursor:"pointer", letterSpacing:1 } }, "\u2193 EXPORTAR EXCEL")
               ),
               h("div", { style: { display:"flex", flexDirection:"column", gap:8 } },
-                orderedPipeline.map(function(p) {
+                filteredPipeline.map(function(p) {
                   return h(PipelineRow, { key:p.id, prospect:p, onStatusChange:updateStatus, onRemove:removeFromPipeline, onObsChange:updateObs, statuses:statuses });
                 })
               )
