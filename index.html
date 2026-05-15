@@ -60,6 +60,11 @@ function lsSet(key, val) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {}
 }
 
+function getPhotoUrl(photoName) {
+  if (!photoName) return null;
+  return "https://places.googleapis.com/v1/"+photoName+"/media?maxWidthPx=400&key="+GOOGLE_KEY;
+}
+  
 function PasswordScreen(props) {
   var s = useState([]); var dots = s[0]; var setDots = s[1];
   var sk = useState(false); var shake = sk[0]; var setShake = sk[1];
@@ -233,8 +238,12 @@ function HoursDisplay(props) {
 function PlaceCard(props) {
   var exp = useState(false); var expanded = exp[0]; var setExpanded = exp[1];
   var place = props.place; var index = props.index;
+  var photoUrl = getPhotoUrl(place.photoName);
   return h("div", { className:"card-enter", style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16, display:"flex", flexDirection:"column", gap:10, animationDelay: (index*0.04)+"s", opacity:0, position:"relative", overflow:"hidden" } },
     h("div", { style: { display:"flex", gap:12, alignItems:"flex-start" } },
+      photoUrl && h("div", { style: { width:"100%", height:140, borderRadius:6, overflow:"hidden", marginBottom:2 } },
+  h("img", { src:photoUrl, alt:place.name, style: { width:"100%", height:"100%", objectFit:"cover", display:"block" } })
+),
       h("div", { style: { flexShrink:0 } },
         place.score !== null
           ? h(ScoreRing, { score:place.score, grade:place.grade })
@@ -509,14 +518,15 @@ function App() {
     if (!category.trim() || !city.trim()) { setError("Preencha cidade e categoria."); return; }
     setError(""); setLoading(true); setLoadingPage(0); setResults([]);
 
-    var HEADERS = { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.regularOpeningHours,places.currentOpeningHours,nextPageToken" };
+    var HEADERS = { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.regularOpeningHours,places.currentOpeningHours,places.photos,nextPageToken" };
     var allPlaces = [];
     var pageToken = null;
     var page = 0;
     var catSnap = category; var citySnap = city; var minSnap = minReviews;
 
     function mapPlace(p) {
-      var hours = (p.regularOpeningHours&&p.regularOpeningHours.weekdayDescriptions)||[]; var isOpen = p.currentOpeningHours&&p.currentOpeningHours.openNow; return { id:p.id, name:(p.displayName&&p.displayName.text)||"Sem nome", address:p.formattedAddress||"", phone:p.nationalPhoneNumber||"N/D", rating:p.rating||0, reviewCount:p.userRatingCount||0, weekdayText:hours, isOpen: isOpen, category:catSnap, city:citySnap, score:null, grade:null, scoreExplanation:null, pitch:null };
+      var hours = (p.regularOpeningHours&&p.regularOpeningHours.weekdayDescriptions)||[]; var isOpen = p.currentOpeningHours&&p.currentOpeningHours.openNow; var photoName = (p.photos && p.photos[0] && p.photos[0].name) || null;
+      return { id:p.id, name:(p.displayName&&p.displayName.text)||"Sem nome", address:p.formattedAddress||"", phone:p.nationalPhoneNumber||"N/D", rating:p.rating||0, reviewCount:p.userRatingCount||0, weekdayText:hours, isOpen: isOpen, category:catSnap, city:citySnap, score:null, grade:null, scoreExplanation:null, pitch:null, photoName:photoName };
     }
 
     function fetchPage() {
@@ -545,10 +555,10 @@ function App() {
     fetchPage();
   }
 
-  function scorePlace(place, index) {
+  function scorePlace(place, index, callback) {
     setScoringId(place.id); setError("");
     var prompt = "Avalie este prospect para servicos de marketing digital.\n\nNome: "+place.name+"\nCategoria: "+place.category+"\nCidade: "+place.city+"\nAvaliacao Google: "+place.rating+"/5\nNumero de avaliacoes: "+place.reviewCount+"\nTelefone: "+(place.phone!=="N/D"?"Sim":"Nao")+"\n\nCriterios: avaliacao < 3.5 penalize, > 4.5 bonus, 200+ avaliacoes bonus, sem telefone penalize. Use escala 0-100. Responda SOMENTE JSON puro sem markdown: {\"score\":XX,\"grade\":\"X\",\"explanation\":\"2 frases.\",\"pitch\":\"2 frases de pitch.\"}\nGrades: A=80-100, B=60-79, C=40-59, D=0-39";
-    fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key="+GEMINI_KEY, {
+    fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+GEMINI_KEY, {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.4, maxOutputTokens:500} })
     })
@@ -556,18 +566,25 @@ function App() {
     .then(function(data) {
       var raw = (data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text)||"{}";
       var clean = raw.replace(/```json|```/g, "").trim();
-      var parsed = JSON.parse(clean);
+      var jsonMatch = clean.match(/\{[\s\S]*\}/);
+      var parsed = JSON.parse(jsonMatch ? jsonMatch[0] : clean);
       setResults(function(prev) { return prev.map(function(p, i) { return i===index ? Object.assign({}, p, {score:parsed.score, grade:parsed.grade, scoreExplanation:parsed.explanation, pitch:parsed.pitch}) : p; }); });
       setScoringId(null);
+      if (callback) callback();
     })
-    .catch(function(e) { setError("Erro no scoring: "+e.message); setScoringId(null); });
+    .catch(function(e) { setError("Erro no scoring: "+e.message); setScoringId(null); if (callback) callback(); });
   }
 
   function scoreAll() {
+    var snapshot = results.slice();
     var i = 0;
     function next() {
-      while (i < results.length && results[i].score !== null) i++;
-      if (i < results.length) { scorePlace(results[i], i); i++; setTimeout(next, 1500); }
+      while (i < snapshot.length && snapshot[i].score !== null) i++;
+      if (i >= snapshot.length) return;
+      var place = snapshot[i];
+      var idx = i;
+      i++;
+      scorePlace(place, idx, next);
     }
     next();
   }
