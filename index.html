@@ -282,13 +282,12 @@ function PhotoModal(props) {
   
 function PlaceCard(props) {
   var exp = React.useState(false); var expanded = exp[0]; var setExpanded = exp[1];
-  var pm = React.useState(false); var showPhotos = pm[0]; var setShowPhotos = pm[1];
   var place = props.place; var index = props.index;
   var photoUrls = getPhotoUrls(place.photoNames);
 
-  function handleCardClick(e) {
+function handleCardClick(e) {
     if (e.target.closest("button")) return;
-    if (photoUrls.length > 0) setShowPhotos(true);
+    if (photoUrls.length > 0) props.onOpenPhoto(place, photoUrls);
   }
 
   return h("div", {
@@ -343,9 +342,7 @@ function PlaceCard(props) {
         h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#38bdf8", marginBottom:4, textTransform:"uppercase", letterSpacing:1 } }, "\uD83C\uDFAF Pitch Sugerido"),
         h("div", { style: { fontSize:12, color:"#e2e8f0", lineHeight:1.6, fontStyle:"italic" } }, '"'+place.pitch+'"')
       )
-   ),
-
-    showPhotos && h(PhotoModal, { name:place.name, photos:photoUrls, onClose: function() { setShowPhotos(false); } })
+    )
   );
 }
 
@@ -540,6 +537,7 @@ function App() {
   var sc = useState(null); var scoringId = sc[0]; var setScoringId = sc[1];
   var er = useState(""); var error = er[0]; var setError = er[1];
   var fs = useState(null); var filterStatus = fs[0]; var setFilterStatus = fs[1];
+  var pm2 = useState(null); var activePhoto = pm2[0]; var setActivePhoto = pm2[1];
 
   useEffect(function() {
     var p = lsGet("pipeline_v1"); if (p) setPipeline(p);
@@ -756,7 +754,7 @@ function App() {
 
         h("div", { style: { display:"flex", flexDirection:"column", gap:10 } },
           results.map(function(place, i) {
-            return h(PlaceCard, { key:place.id, place:place, index:i, onScore:scorePlace, onAdd:addToPipeline, scoring:scoringId===place.id, inPipeline:!!pipeline.find(function(p) { return p.id===place.id; }) });
+            return h(PlaceCard, { key:place.id, place:place, index:i, onScore:scorePlace, onAdd:addToPipeline, scoring:scoringId===place.id, inPipeline:!!pipeline.find(function(p) { return p.id===place.id; }), onOpenPhoto: function(pl, urls) { setActivePhoto({ name:pl.name, photos:urls }); } });
           })
         )
       ),
@@ -799,7 +797,8 @@ function App() {
 
     // DASHBOARD TAB
     tab === "dashboard" && h(Dashboard, { pipeline: pipeline, statuses: statuses }),
-
+           
+activePhoto && h(PhotoModal, { name:activePhoto.name, photos:activePhoto.photos, onClose: function() { setActivePhoto(null); } }),
     showStatusMgr && h(StatusManager, { statuses:statuses, onSave:handleSaveStatuses, onClose: function() { setShowStatusMgr(false); } })
   );
 }
