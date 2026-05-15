@@ -240,16 +240,16 @@ function PlaceCard(props) {
   var place = props.place; var index = props.index;
   var photoUrl = getPhotoUrl(place.photoName);
   return h("div", { className:"card-enter", style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16, display:"flex", flexDirection:"column", gap:10, animationDelay: (index*0.04)+"s", opacity:0, position:"relative", overflow:"hidden" } },
+    photoUrl && h("div", { style: { width:"100%", height:140, borderRadius:6, overflow:"hidden", marginBottom:2 } },
+      h("img", { src:photoUrl, alt:place.name, style: { width:"100%", height:"100%", objectFit:"cover", display:"block" } })
+    ),
     h("div", { style: { display:"flex", gap:12, alignItems:"flex-start" } },
-      photoUrl && h("div", { style: { width:"100%", height:140, borderRadius:6, overflow:"hidden", marginBottom:2 } },
-  h("img", { src:photoUrl, alt:place.name, style: { width:"100%", height:"100%", objectFit:"cover", display:"block" } })
-),
       h("div", { style: { flexShrink:0 } },
         place.score !== null
           ? h(ScoreRing, { score:place.score, grade:place.grade })
           : h("div", { className: props.scoring ? "scanning" : "", onClick: function() { if (!props.scoring) props.onScore(place, index); }, style: { width:60, height:60, border:"2px dashed #2a3142", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", cursor: props.scoring ? "default" : "pointer", color:"#3d4559", fontSize:10, textAlign:"center", fontFamily:"'Space Mono',monospace", flexShrink:0 } },
-            props.scoring ? "..." : "IA Score"
-          )
+              props.scoring ? "..." : "IA Score"
+            )
       ),
       h("div", { style: { flex:1, minWidth:0 } },
         h("div", { style: { fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:14, color:"#e2e8f0", marginBottom:3 } }, place.name),
