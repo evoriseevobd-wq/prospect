@@ -294,7 +294,7 @@ function PlaceCard(props) {
   return h("div", {
     className:"card-enter",
     onClick: handleCardClick,
-    style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16, display:"flex", flexDirection:"column", gap:10, animationDelay:(index*0.04)+"s", opacity:0, position:"relative", overflow:"hidden", cursor: photoUrls.length > 0 ? "pointer" : "default" }
+    style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16, display:"flex", flexDirection:"column", gap:10, animationDelay:(index*0.04)+"s", opacity:0, position:"relative", overflow:"visible", cursor: photoUrls.length > 0 ? "pointer" : "default" }
   },
 
     photoUrls.length > 0 && h("div", { style: { position:"absolute", top:10, right:12, display:"flex", alignItems:"center", gap:4, fontFamily:"'Space Mono',monospace", fontSize:10, color:"#3d4559", pointerEvents:"none" } },
@@ -343,7 +343,9 @@ function PlaceCard(props) {
         h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#38bdf8", marginBottom:4, textTransform:"uppercase", letterSpacing:1 } }, "\uD83C\uDFAF Pitch Sugerido"),
         h("div", { style: { fontSize:12, color:"#e2e8f0", lineHeight:1.6, fontStyle:"italic" } }, '"'+place.pitch+'"')
       )
-    )
+   ),
+
+    showPhotos && h(PhotoModal, { name:place.name, photos:photoUrls, onClose: function() { setShowPhotos(false); } })
   );
 }
 
