@@ -64,6 +64,13 @@ function getPhotoUrl(photoName) {
   if (!photoName) return null;
   return "https://places.googleapis.com/v1/"+photoName+"/media?maxWidthPx=400&key="+GOOGLE_KEY;
 }
+
+  function getPhotoUrls(photos) {
+  if (!photos || photos.length === 0) return [];
+  return photos.map(function(p) {
+    return "https://places.googleapis.com/v1/"+p+"/media?maxWidthPx=800&key="+GOOGLE_KEY;
+  });
+}
   
 function PasswordScreen(props) {
   var s = useState([]); var dots = s[0]; var setDots = s[1];
@@ -235,19 +242,70 @@ function HoursDisplay(props) {
   );
 }
 
-function PlaceCard(props) {
-  var exp = useState(false); var expanded = exp[0]; var setExpanded = exp[1];
-  var place = props.place; var index = props.index;
-  var photoUrl = getPhotoUrl(place.photoName);
-  return h("div", { className:"card-enter", style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16, display:"flex", flexDirection:"column", gap:10, animationDelay: (index*0.04)+"s", opacity:0, position:"relative", overflow:"hidden" } },
-    photoUrl && h("div", { style: { width:"100%", height:140, borderRadius:6, overflow:"hidden", marginBottom:2 } },
-      h("img", { src:photoUrl, alt:place.name, style: { width:"100%", height:"100%", objectFit:"cover", display:"block" } })
+function PhotoModal(props) {
+  var li = React.useState(null); var lightbox = li[0]; var setLightbox = li[1];
+
+  function handleOverlay(e) {
+    if (e.target === e.currentTarget) props.onClose();
+  }
+
+  return h("div", {
+    onClick: handleOverlay,
+    style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:800, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }
+  },
+    h("div", { onClick: function(e) { e.stopPropagation(); }, style: { background:"#131720", border:"1px solid #2a3142", borderRadius:12, width:"100%", maxWidth:460, maxHeight:"85vh", display:"flex", flexDirection:"column", overflow:"hidden" } },
+      h("div", { style: { padding:"14px 16px", borderBottom:"1px solid #1e2535", display:"flex", alignItems:"center", gap:10, flexShrink:0 } },
+        h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b", textTransform:"uppercase", letterSpacing:1 } }, "\uD83D\uDCF7 "+props.name),
+        h("div", { style: {flex:1} }),
+        h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#3d4559" } }, props.photos.length+" fotos"),
+        h("button", { onClick: props.onClose, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", width:28, height:28, borderRadius:6, cursor:"pointer", fontSize:16, marginLeft:8 } }, "\u00d7")
+      ),
+      h("div", { style: { overflowY:"auto", padding:12, display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 } },
+        props.photos.map(function(url, i) {
+          return h("div", { key:i, style: { gridColumn: i===0 ? "1 / -1" : "auto" }, onClick: function() { setLightbox(url); } },
+            h("img", { src:url, alt:"foto "+(i+1), style: { width:"100%", height: i===0 ? 180 : 110, objectFit:"cover", borderRadius:8, display:"block", cursor:"pointer", border:"2px solid transparent", transition:"border-color 0.15s" },
+              onMouseEnter: function(e) { e.target.style.borderColor="#38bdf8"; },
+              onMouseLeave: function(e) { e.target.style.borderColor="transparent"; }
+            })
+          );
+        })
+      )
     ),
+    lightbox && h("div", {
+      onClick: function() { setLightbox(null); },
+      style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:900, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }
+    },
+      h("img", { src:lightbox, alt:"foto ampliada", style: { maxWidth:"100%", maxHeight:"90vh", borderRadius:10, objectFit:"contain" } })
+    )
+  );
+}
+  
+function PlaceCard(props) {
+  var exp = React.useState(false); var expanded = exp[0]; var setExpanded = exp[1];
+  var pm = React.useState(false); var showPhotos = pm[0]; var setShowPhotos = pm[1];
+  var place = props.place; var index = props.index;
+  var photoUrls = getPhotoUrls(place.photoNames);
+
+  function handleCardClick(e) {
+    if (e.target.closest("button")) return;
+    if (photoUrls.length > 0) setShowPhotos(true);
+  }
+
+  return h("div", {
+    className:"card-enter",
+    onClick: handleCardClick,
+    style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:16, display:"flex", flexDirection:"column", gap:10, animationDelay:(index*0.04)+"s", opacity:0, position:"relative", overflow:"hidden", cursor: photoUrls.length > 0 ? "pointer" : "default" }
+  },
+
+    photoUrls.length > 0 && h("div", { style: { position:"absolute", top:10, right:12, display:"flex", alignItems:"center", gap:4, fontFamily:"'Space Mono',monospace", fontSize:10, color:"#3d4559", pointerEvents:"none" } },
+      "\uD83D\uDCF7 "+photoUrls.length+" fotos"
+    ),
+
     h("div", { style: { display:"flex", gap:12, alignItems:"flex-start" } },
       h("div", { style: { flexShrink:0 } },
         place.score !== null
           ? h(ScoreRing, { score:place.score, grade:place.grade })
-          : h("div", { className: props.scoring ? "scanning" : "", onClick: function() { if (!props.scoring) props.onScore(place, index); }, style: { width:60, height:60, border:"2px dashed #2a3142", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", cursor: props.scoring ? "default" : "pointer", color:"#3d4559", fontSize:10, textAlign:"center", fontFamily:"'Space Mono',monospace", flexShrink:0 } },
+          : h("div", { className: props.scoring ? "scanning" : "", onClick: function(e) { e.stopPropagation(); if (!props.scoring) props.onScore(place, index); }, style: { width:60, height:60, border:"2px dashed #2a3142", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", cursor: props.scoring ? "default" : "pointer", color:"#3d4559", fontSize:10, textAlign:"center", fontFamily:"'Space Mono',monospace", flexShrink:0 } },
               props.scoring ? "..." : "IA Score"
             )
       ),
@@ -260,21 +318,22 @@ function PlaceCard(props) {
         h("div", { style: { fontSize:12, color:"#64748b", marginBottom:2 } }, "\uD83D\uDCCD "+place.address),
         h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:12, color:"#38bdf8" } }, "\uD83D\uDCDE "+place.phone),
         place.isOpen !== undefined && h("div", { style: { marginTop:4 } },
-          h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, background: place.isOpen ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)", color: place.isOpen ? "#4ade80" : "#f87171", border: "1px solid "+(place.isOpen ? "#4ade80" : "#f87171")+"40", borderRadius:4, padding:"2px 7px" } },
+          h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, background: place.isOpen ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)", color: place.isOpen ? "#4ade80" : "#f87171", border:"1px solid "+(place.isOpen ? "#4ade80" : "#f87171")+"40", borderRadius:4, padding:"2px 7px" } },
             place.isOpen ? "\u25cf Aberto agora" : "\u25cf Fechado agora"
           )
         ),
         place.weekdayText && place.weekdayText.length > 0 && h(HoursDisplay, { weekdayText: place.weekdayText })
       ),
       h("div", { style: { display:"flex", flexDirection:"column", gap:6, flexShrink:0 } },
-        h("button", { onClick: function() { props.onAdd(place); }, disabled: props.inPipeline, style: { background: props.inPipeline ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)", color: props.inPipeline ? "#3d4559" : "#0c0f14", border:"none", padding:"6px 12px", borderRadius:5, fontSize:11, fontWeight:700, fontFamily:"'Space Mono',monospace", cursor: props.inPipeline ? "default" : "pointer", whiteSpace:"nowrap" } },
+        h("button", { onClick: function(e) { e.stopPropagation(); props.onAdd(place); }, disabled: props.inPipeline, style: { background: props.inPipeline ? "#1e2535" : "linear-gradient(135deg,#38bdf8,#0ea5e9)", color: props.inPipeline ? "#3d4559" : "#0c0f14", border:"none", padding:"6px 12px", borderRadius:5, fontSize:11, fontWeight:700, fontFamily:"'Space Mono',monospace", cursor: props.inPipeline ? "default" : "pointer", whiteSpace:"nowrap" } },
           props.inPipeline ? "\u2713 No CRM" : "+ Pipeline"
         ),
-        place.score !== null && h("button", { onClick: function() { setExpanded(!expanded); }, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", padding:"5px 10px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } },
+        place.score !== null && h("button", { onClick: function(e) { e.stopPropagation(); setExpanded(!expanded); }, style: { background:"transparent", border:"1px solid #2a3142", color:"#64748b", padding:"5px 10px", borderRadius:5, fontSize:10, fontFamily:"'Space Mono',monospace", cursor:"pointer" } },
           expanded ? "\u25b2 ocultar" : "\u25bc detalhar"
         )
       )
     ),
+
     expanded && place.scoreExplanation && h("div", { style: { borderTop:"1px solid #1e2535", paddingTop:10, display:"flex", flexDirection:"column", gap:8 } },
       h("div", { style: { background:"#0c0f14", borderRadius:6, padding:10, border:"1px solid #1e2535" } },
         h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:9, color:"#64748b", marginBottom:4, textTransform:"uppercase", letterSpacing:1 } }, "Analise do Score"),
@@ -524,10 +583,19 @@ function App() {
     var page = 0;
     var catSnap = category; var citySnap = city; var minSnap = minReviews;
 
-    function mapPlace(p) {
-      var hours = (p.regularOpeningHours&&p.regularOpeningHours.weekdayDescriptions)||[]; var isOpen = p.currentOpeningHours&&p.currentOpeningHours.openNow; var photoName = (p.photos && p.photos[0] && p.photos[0].name) || null;
-      return { id:p.id, name:(p.displayName&&p.displayName.text)||"Sem nome", address:p.formattedAddress||"", phone:p.nationalPhoneNumber||"N/D", rating:p.rating||0, reviewCount:p.userRatingCount||0, weekdayText:hours, isOpen: isOpen, category:catSnap, city:citySnap, score:null, grade:null, scoreExplanation:null, pitch:null, photoName:photoName };
-    }
+  function mapPlace(p) {
+  var hours = (p.regularOpeningHours&&p.regularOpeningHours.weekdayDescriptions)||[];
+  var isOpen = p.currentOpeningHours&&p.currentOpeningHours.openNow;
+  var photoNames = (p.photos || []).map(function(ph) { return ph.name; });
+  return {
+    id:p.id, name:(p.displayName&&p.displayName.text)||"Sem nome",
+    address:p.formattedAddress||"", phone:p.nationalPhoneNumber||"N/D",
+    rating:p.rating||0, reviewCount:p.userRatingCount||0,
+    weekdayText:hours, isOpen:isOpen, category:catSnap, city:citySnap,
+    score:null, grade:null, scoreExplanation:null, pitch:null,
+    photoNames: photoNames
+  };
+}
 
     function fetchPage() {
       var body = { textQuery: catSnap+" em "+citySnap, languageCode:"pt-BR", maxResultCount:20 };
