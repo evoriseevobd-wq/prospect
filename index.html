@@ -349,13 +349,18 @@ function PipelineRow(props) {
 
   function saveObs() { props.onObsChange(p.id, obsValue); setEditingObs(false); }
 
-  return h("div", { style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:"12px 16px", display:"flex", flexDirection:"column", gap:10 } },
+return h("div", { onClick: function(e) { if (e.target.closest("button") || e.target.closest("textarea")) return; var urls = getPhotoUrls(p.photoNames); if (urls.length > 0) props.onOpenPhoto(p, urls); }, style: { background:"#131720", border:"1px solid #1e2535", borderRadius:8, padding:"12px 16px", display:"flex", flexDirection:"column", gap:10, cursor: (p.photoNames && p.photoNames.length > 0) ? "pointer" : "default" } },
     h("div", { style: { display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" } },
       p.score !== null && h(ScoreRing, { score:p.score, grade:p.grade }),
       h("div", { style: { flex:1, minWidth:160 } },
         h("div", { style: { fontFamily:"'DM Sans',sans-serif", fontWeight:600, fontSize:13, color:"#e2e8f0" } }, p.name),
         h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, color:"#64748b" } }, p.city+" \u00b7 "+p.category),
         h("div", { style: { fontFamily:"'Space Mono',monospace", fontSize:11, color:"#38bdf8", marginTop:2 } }, p.phone),
+        p.isOpen !== undefined && h("div", { style: { marginTop:4 } },
+  h("span", { style: { fontFamily:"'Space Mono',monospace", fontSize:10, background: p.isOpen ? "rgba(74,222,128,0.15)" : "rgba(248,113,113,0.15)", color: p.isOpen ? "#4ade80" : "#f87171", border:"1px solid "+(p.isOpen ? "#4ade80" : "#f87171")+"40", borderRadius:4, padding:"2px 7px" } },
+    p.isOpen ? "\u25cf Aberto agora" : "\u25cf Fechado agora"
+  )
+),
         p.weekdayText && p.weekdayText.length > 0 && h(HoursDisplay, { weekdayText: p.weekdayText })
       ),
       h(Stars, { rating:p.rating }),
@@ -781,7 +786,7 @@ function App() {
               ),
               h("div", { style: { display:"flex", flexDirection:"column", gap:8 } },
                 filteredPipeline.map(function(p) {
-                  return h(PipelineRow, { key:p.id, prospect:p, onStatusChange:updateStatus, onRemove:removeFromPipeline, onObsChange:updateObs, statuses:statuses });
+                  return h(PipelineRow, { key:p.id, prospect:p, onStatusChange:updateStatus, onRemove:removeFromPipeline, onObsChange:updateObs, statuses:statuses, onOpenPhoto: function(pl, urls) { setActivePhoto({ name:pl.name, photos:urls }); } });
                 })
               )
             )
