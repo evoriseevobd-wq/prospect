@@ -6,6 +6,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.get("/health", (req, res) => res.json({ ok: true }));
+app.get("/debug", (req, res) => res.json({ 
+  google_key: process.env.GOOGLE_KEY ? process.env.GOOGLE_KEY.slice(0,10)+"..." : "NAO DEFINIDA"
+}));
 
 const GOOGLE_KEY = process.env.GOOGLE_KEY;
 const GEMINI_KEY = process.env.GEMINI_KEY;
