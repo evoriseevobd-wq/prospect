@@ -30,8 +30,7 @@ textarea::placeholder { color: #3d4559; }
 <body>
 <div id="root"></div>
 <script>
-const GOOGLE_KEY = "AIzaSyA5UXYFFa5CdvAAvi_whmPmXlx1ohTFSg8";
-const GEMINI_KEY = "AIzaSyBt7wrj4B2bITOAbm0qjPfH_AP9ZHEtjKg";
+const API_BASE = "https://kds-prospect-api.dahead.easypanel.host";
 const CORRECT_PASSWORD = "1235";
 
 const DEFAULT_STATUSES = [
@@ -68,7 +67,7 @@ function getPhotoUrl(photoName) {
   function getPhotoUrls(photos) {
   if (!photos || photos.length === 0) return [];
   return photos.map(function(p) {
-    return "https://places.googleapis.com/v1/"+p+"/media?maxWidthPx=800&key="+GOOGLE_KEY;
+    return API_BASE+"/api/places/photo?name="+encodeURIComponent(p);
   });
 }
   
@@ -578,7 +577,7 @@ function App() {
     if (!category.trim() || !city.trim()) { setError("Preencha cidade e categoria."); return; }
     setError(""); setLoading(true); setLoadingPage(0); setResults([]);
 
-    var HEADERS = { "Content-Type": "application/json", "X-Goog-Api-Key": GOOGLE_KEY, "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.rating,places.userRatingCount,places.regularOpeningHours,places.currentOpeningHours,places.photos,nextPageToken" };
+
     var allPlaces = [];
     var pageToken = null;
     var page = 0;
@@ -601,7 +600,7 @@ function App() {
     function fetchPage() {
       var body = { textQuery: catSnap+" em "+citySnap, languageCode:"pt-BR", maxResultCount:20 };
       if (pageToken) body.pageToken = pageToken;
-      fetch("https://places.googleapis.com/v1/places:searchText", { method:"POST", headers:HEADERS, body:JSON.stringify(body) })
+      fetch(API_BASE+"/api/places/search", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) })
         .then(function(res) { return res.json().then(function(d) { return { ok:res.ok, d:d }; }); })
         .then(function(rd) {
           if (!rd.ok) throw new Error((rd.d.error&&rd.d.error.message)||"Erro API");
@@ -627,7 +626,7 @@ function App() {
   function scorePlace(place, index, callback) {
     setScoringId(place.id); setError("");
     var prompt = "Avalie este prospect para servicos de marketing digital.\n\nNome: "+place.name+"\nCategoria: "+place.category+"\nCidade: "+place.city+"\nAvaliacao Google: "+place.rating+"/5\nNumero de avaliacoes: "+place.reviewCount+"\nTelefone: "+(place.phone!=="N/D"?"Sim":"Nao")+"\n\nCriterios: avaliacao < 3.5 penalize, > 4.5 bonus, 200+ avaliacoes bonus, sem telefone penalize. Use escala 0-100. Responda SOMENTE JSON puro sem markdown: {\"score\":XX,\"grade\":\"X\",\"explanation\":\"2 frases.\",\"pitch\":\"2 frases de pitch.\"}\nGrades: A=80-100, B=60-79, C=40-59, D=0-39";
-    fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+GEMINI_KEY, {
+    fetch(API_BASE+"/api/gemini/score", {
       method:"POST", headers:{"Content-Type":"application/json"},
       body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.4, maxOutputTokens:500} })
     })
