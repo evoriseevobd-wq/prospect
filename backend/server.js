@@ -5,6 +5,7 @@ const fetch = require("cross-fetch");
 const app = express();
 app.use(cors());
 app.use(express.json());
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 const GOOGLE_KEY = process.env.GOOGLE_KEY;
 const GEMINI_KEY = process.env.GEMINI_KEY;
