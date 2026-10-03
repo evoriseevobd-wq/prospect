@@ -3,7 +3,9 @@ const cors = require("cors");
 const fetch = require("cross-fetch");
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: "*"
+}));
 app.use(express.json());
 
 app.get("/health", (req, res) => res.json({ ok: true }));
